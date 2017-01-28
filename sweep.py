@@ -54,7 +54,7 @@ def saveColorSTL(filename, mesh, swapYZ=False):
     minVector -= Vector(0.001,0.001,0.001) # make sure all STL coordinates are strictly positive as per Wikipedia
      
     with open(filename, "wb") as f:
-        f.write(pack("80s",''))
+        f.write(pack("80s",b''))
         f.write(pack("<I",numTriangles))
         for rgb,monoMesh in mesh:
             color = 0x8000 | ( (rgb[0] >> 3) << 10 ) | ( (rgb[1] >> 3) << 5 ) | ( (rgb[2] >> 3) << 0 )
