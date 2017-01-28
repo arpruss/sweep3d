@@ -213,7 +213,7 @@ if __name__ == '__main__':
     rings.append( ( (0,0,255), sweep(path3, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=True, cacheTriangulation=True) ) )
 #    rings.append( ( (255,0,0), sweep(lambda t:Vector(t,0,0), section, 0,6,.1,scad=True, closed=False)))
 
-    saveColorSCAD("rings.scad", rings)
+    saveColorSCAD("borromean.scad", rings)
 
     rings = []
     rings.append( ( (255,0,0), sweep(path1, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=False) ) )
@@ -221,4 +221,12 @@ if __name__ == '__main__':
     rings.append( ( (0,0,255), sweep(path3, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=False) ) )
 #    rings.append( ( (255,0,0), sweep(lambda t:Vector(t,0,0), section, 0,6,.1,closed=False)))
 
-    saveColorSTL("rings.stl", rings)
+    saveColorSTL("borromean.stl", rings)
+
+    rings = []
+    # cinquefoil from http://www.maa.org/sites/default/files/images/upload_library/23/stemkoski/knots/page6.html
+    
+    cinqueFoilPath = lambda t: scale/2.*Vector(math.cos(2*t) * (3 + math.cos(5*t)), math.sin(2*t) * (3 + math.cos(5*t)), math.sin(5*t))
+    saveColorSTL("cinquefoil.stl", [ ( (255,255,0), sweep(cinqueFoilPath, section, 0, 2*math.pi, .05) ) ] )
+    saveColorSCAD("cinquefoil.scad", [ ( (255,255,0), sweep(cinqueFoilPath, section, 0, 2*math.pi, .05, scad=True, cacheTriangulation=True) ) ] )
+                
