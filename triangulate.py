@@ -8,12 +8,13 @@ def cross_z(a,b):
     return a.x * b.y - a.y * b.x
 
 def pointInside(p,a,b,c):
+    # checks if point is strictly inside the triangle a,b,c
     c1 = cross_z(p-a, b-a)
     c2 = cross_z(p-b, c-b)
-    if c1 * c2 < 0:
+    if c1 * c2 <= 0:
         return False
     c3 = cross_z(p-c, a-c)
-    return c1 * c3 >= 0 and c2 * c3 >= 0
+    return c1 * c3 > 0 and c2 * c3 > 0
     
 def triangulate(polygon):
     # assume input polygon is counterclockwise
@@ -90,9 +91,18 @@ def polygonsToSVG(vertices, polys):
     svgArray.append('<svg width="%fmm" height="%fmm" viewBox="0 0 %f %f" xmlns="http://www.w3.org/2000/svg" version="1.1">'%(maxX-minX,maxY-minY,maxX-minX,maxY-minY))
     svgArray.append('\n')
     for p in polys:
-        for i in range(len(p)):
-            svgArray.append('<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="black" stroke-width="0.15px"/>' % 
-                (vertices[p[i-1]].x-minX,vertices[p[i-1]].y-minY,vertices[p[i]].x-minX,vertices[p[i]].y-minY))
+        path = '<path stroke="black" stroke-width="0.25px" fill="yellow" d="'
+        for i in range(len(p)+1):
+            path += 'L' if i else 'M'
+            path += '%.6f %.6f ' % ( vertices[p[i % len(p)]] - (minX,minY) )
+        path += '/>'
+        svgArray.append(path)
     svgArray.append('</svg>')
     return '\n'.join(svgArray)
+    
+if __name__ == '__main__':
+    import cmath
+    import math
+    polygon = [ cmath.exp(2j * math.pi * k / 20.) * (10 if k%2 else 15) for k in range(20) ]
+    print polygonsToSVG(polygon, triangulate(polygon))
     
