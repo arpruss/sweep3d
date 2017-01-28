@@ -1,4 +1,5 @@
 from vector import *
+from random import shuffle
 
 # triangulation algorithm based on https://www.geometrictools.com/Documentation/TriangulationByEarClipping.pdf
 # minus all the double-linked list stuff that would be great but I am not bothering with it
@@ -51,11 +52,11 @@ def triangulate(polygon):
         return True
         
     ear = [isEar(i) for i in range(n)]
-    
+
     while n >= 3:
         i = 0
         foundEar = False
-        for i in range(n):
+        for i in range(0,n):
             if ear[i]:
                 triangles.append((index[i-1],index[i],index[(i+1) % n]))
                 # TODO: less deleting!
@@ -67,11 +68,11 @@ def triangulate(polygon):
                 if reflex[i-1]:
                     reflex[i-1] = isReflex(i-1)
                 if reflex[i % n]:
-                    reflex[i % n] = isReflex(i)
+                    reflex[i % n] = isReflex(i % n)
                 if not reflex[i-1]:
                     ear[i-1] = isEar(i-1)
                 if not reflex[i % n]:
-                    ear[i % n] = isEar(i)
+                    ear[i % n] = isEar(i % n)
                 foundEar = True
                 break
             
