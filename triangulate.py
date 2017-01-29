@@ -54,22 +54,29 @@ def triangulate(polygon):
     ear = [isEar(i) for i in range(n)]
     
     while n >= 3:
-        i = ear.index(True)
-        triangles.append((index[i-1],index[i],index[(i+1) % n]))
-        # TODO: less deleting!
-        del polygon[i]
-        del reflex[i]
-        del ear[i]
-        del index[i]
-        n -= 1
-        # it's tempting to optimize here for the case where n==3, but that would
-        # probably be counterproductive, as the n==3 test would run O(n) times
-        if reflex[i-1]:
-            reflex[i-1] = isReflex(i-1)
-        if reflex[i % n]:
-            reflex[i % n] = isReflex(i % n)
-        ear[i-1] = isEar(i-1)
-        ear[i % n] = isEar(i % n)
+        foundEar = False
+        # the backwards search makes the deletions faster
+        # if we had a double-indexed list, we wouldn't have this to worry about
+        for i in range(n-1,-1,-1):
+            if ear[i]:
+                triangles.append((index[i-1],index[i],index[(i+1) % n]))
+                # TODO: less deleting!
+                del polygon[i]
+                del reflex[i]
+                del ear[i]
+                del index[i]
+                n -= 1
+                # it's tempting to optimize here for the case where n==3, but that would
+                # probably be counterproductive, as the n==3 test would run O(n) times
+                if reflex[i-1]:
+                    reflex[i-1] = isReflex(i-1)
+                if reflex[i % n]:
+                    reflex[i % n] = isReflex(i % n)
+                ear[i-1] = isEar(i-1)
+                ear[i % n] = isEar(i % n)
+                foundEar = True
+                break
+        assert foundEar
     return triangles
 
 def polygonsToSVG(vertices, polys):
