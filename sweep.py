@@ -6,11 +6,14 @@ import math
 from vector import *
 from triangulate import *
 
-def toColorSCAD(polys, moduleName="object1"):
-    def polyToSCAD(poly):
+def toSCADModule(polys, moduleName):
+    scad = []
+    scad.append("module " +moduleName+ "() {")
+    for rgb,poly in polys:
+        line = "  color([%.3f,%.3f,%.3f]) " % tuple(rgb)
         pointsDict = {}
         i = 0
-        out = "polyhedron(points=["
+        line += "polyhedron(points=["
         points = []
         for face in poly:
             for v in face:
@@ -18,25 +21,19 @@ def toColorSCAD(polys, moduleName="object1"):
                     pointsDict[tuple(v)] = i
                     points.append( "[%.9f,%.9f,%.9f]" % tuple(v) )
                     i += 1
-        out += ",".join(points)
-        out += "], faces=["
-        out += ",".join( "[" + ",".join(str(pointsDict[tuple(v)]) for v in face) + "]" for face in poly ) + "]"
-        out += ");"
-        return out
+        line += ",".join(points)
+        line += "], faces=["
+        line += ",".join( "[" + ",".join(str(pointsDict[tuple(v)]) for v in face) + "]" for face in poly ) + "]"
+        line += ");"
+        scad.append(line)
+    scad.append("}")
+    return "\n".join(scad)
 
-    out = "module " +moduleName+ "() {\n"
-    for rgb,monoPolys in polys:
-        for poly in monoPolys:
-            out += "  color([%.3f,%.3f,%.3f]) " % ( rgb[0]/255., rgb[1]/255., rgb[2]/255. ) 
-            out += "%s\n" % polyToSCAD(poly)
-    out += "}\n"
-    return out
-        
 def saveSCAD(filename, polys, moduleName="object1", quiet=False):
     if not quiet: sys.stderr.write("Saving %s\n" % filename)
     with open(filename, "w") as f:
-        f.write(toColorSCAD(polys, moduleName=moduleName))
-        f.write("\n" + moduleName + "();")
+        f.write(toSCADModule(polys, moduleName))
+        f.write("\n" + moduleName + "();\n")
 
 def saveSTL(filename, mesh, swapYZ=False, quiet=False):
     if not quiet: sys.stderr.write("Saving %s\n" % filename)
@@ -47,25 +44,24 @@ def saveSTL(filename, mesh, swapYZ=False, quiet=False):
         matrix = Matrix( (1,0,0), (0,0,-1), (0,1,0) )
     else:
         matrix = Matrix.identity(3)
-    for rgb,monoMesh in mesh:
-        for triangle in monoMesh:
-            numTriangles += 1
-            for vertex in triangle:
-                vertex = matrix*vertex
-                minVector = Vector(min(minVector[i], vertex[i]) for i in range(3))
+    for rgb,triangle in mesh:
+        numTriangles += 1
+        for vertex in triangle:
+            vertex = matrix*vertex
+            minVector = Vector(min(minVector[i], vertex[i]) for i in range(3))
     minVector -= Vector(0.001,0.001,0.001) # make sure all STL coordinates are strictly positive as per Wikipedia
      
     with open(filename, "wb") as f:
         f.write(pack("80s",b''))
         f.write(pack("<I",numTriangles))
-        for rgb,monoMesh in mesh:
+        for rgb,tri in mesh:
+            rgb = tuple(int(0.5 + 255 * comp) for comp in rgb)
             color = 0x8000 | ( (rgb[0] >> 3) << 10 ) | ( (rgb[1] >> 3) << 5 ) | ( (rgb[2] >> 3) << 0 )
-            for tri in monoMesh:
-                normal = (Vector(tri[1])-Vector(tri[0])).cross(Vector(tri[2])-Vector(tri[0])).normalize()
-                f.write(pack("<3f", *(matrix*normal)))
-                for vertex in tri:
-                    f.write(pack("<3f", *(matrix*(vertex-minVector))))
-                f.write(pack("<H", color))            
+            normal = (Vector(tri[1])-Vector(tri[0])).cross(Vector(tri[2])-Vector(tri[0])).normalize()
+            f.write(pack("<3f", *(matrix*normal)))
+            for vertex in tri:
+                f.write(pack("<3f", *(matrix*(vertex-minVector))))
+            f.write(pack("<H", color))            
                 
 class SectionAligner(object):
     def __init__(self, upright=Vector(0,0,1), keepSectionUpright=False):
@@ -106,7 +102,8 @@ class SectionAligner(object):
         return out
                 
 def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1), 
-        solid=False, clockwise=False, scad=False, cacheTriangulation=False, closed=True, keepSectionUpright=False):
+        solid=False, clockwise=False, scad=False, cacheTriangulation=False, closed=True, keepSectionUpright=False,
+        color=(1.,1.,0.)):
     """
     The upright vector specifies the preferred pointing direction for the y-axis in the input sections.
     The tangent to the mainPain should never be close to parallel to the upright vector. E.g., for a mainly
@@ -117,6 +114,14 @@ def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1),
     
     In polyhedron mode, each little piece of the knot is a separate polyhedron, appropriate for dumping into OpenSCAD.
     """
+    
+    if not hasattr(section, '__call__'):
+        section0 = section
+        section = lambda t : section0
+    
+    if not hasattr(color, '__call__'):
+        color0 = color
+        color = lambda t : color0
     
     if scad:
         solid = True
@@ -143,11 +148,16 @@ def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1),
             return triangulate(s)
         else:
             return cachedTriangulation
+            
+    curColor = None
+    def colorize(data):
+        return [(curColor, p) for p in data]
         
     output = []
     nextCrossSection = None
     t = t1
     while t < t2:
+        curColor = color(t)
         if nextCrossSection is not None:
             curCrossSection,curTriangulation = nextCrossSection,nextTriangulation
         else:
@@ -168,7 +178,7 @@ def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1),
 
         if not closed and not solid and t == t1:
             curTriangulation = getTriangulation(s1)
-            output += applyTriangulation(curCrossSection, curTriangulation, clockwise=clockwise)
+            output += colorize(applyTriangulation(curCrossSection, curTriangulation, clockwise=clockwise))
         
         def triangulateTube(i):
             if clockwise:
@@ -183,16 +193,17 @@ def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1),
             polyhedron += applyTriangulation(nextCrossSection, nextTriangulation, clockwise=not clockwise)
             for i in range(len(curCrossSection)):
                 polyhedron += triangulateTube(i)
-            output.append(polyhedron)
+            output.append((curColor,polyhedron))
         else:
             for i in range(n):
-                output += triangulateTube(i)
+                output += colorize(triangulateTube(i))
                 
         t += tstep
             
     if not solid and not closed:
         s = section(t2)
-        output += applyTriangulation(getCrossSection(s, t2), getTriangulation(s), clockwise=not clockwise)
+        curColor = color(t2)
+        output += colorize(applyTriangulation(getCrossSection(s, t2), getTriangulation(s), clockwise=not clockwise))
         
     return output
     
@@ -213,18 +224,18 @@ if __name__ == '__main__':
     section = lambda t : cmath.exp(1j*t) * baseSection
 
     rings = []
-    rings.append( ( (255,0,0), sweep(path1, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=True, cacheTriangulation=True) ) )
-    rings.append( ( (0,255,0), sweep(path2, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=True, cacheTriangulation=True) ) )
-    rings.append( ( (0,0,255), sweep(path3, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=True, cacheTriangulation=True) ) )
-#    rings.append( ( (255,0,0), sweep(lambda t:Vector(t,0,0), section, 0,6,.1,scad=True, closed=False)))
+    rings += sweep(path1, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=True, cacheTriangulation=True, color=(1.,0.,0.))
+    rings += sweep(path2, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=True, cacheTriangulation=True, color=(0.,1.,0.))
+    rings += sweep(path3, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=True, cacheTriangulation=True, color=(0.,0.,1.))
+#    rings.append( ( (1.,0,0), sweep(lambda t:Vector(t,0,0), section, 0,6,.1,scad=True, closed=False)))
 
     saveSCAD("borromean.scad", rings)
 
     rings = []
-    rings.append( ( (255,0,0), sweep(path1, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=False) ) )
-    rings.append( ( (0,255,0), sweep(path2, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=False) ) )
-    rings.append( ( (0,0,255), sweep(path3, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=False) ) )
-#    rings.append( ( (255,0,0), sweep(lambda t:Vector(t,0,0), section, 0,6,.1,closed=False)))
+    rings += sweep(path1, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=False, color=(1.,0.,0.))
+    rings += sweep(path2, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=False, color=(0.,1.,0.))
+    rings += sweep(path3, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=False, color=(0.,0.,1.))
+#    rings.append( ( (1.,0,0), sweep(lambda t:Vector(t,0,0), section, 0,6,.1,closed=False)))
 
     saveSTL("borromean.stl", rings)
 
@@ -232,8 +243,8 @@ if __name__ == '__main__':
     # cinquefoil from http://www.maa.org/sites/default/files/images/upload_library/23/stemkoski/knots/page6.html
     
     cinqueFoilPath = lambda t: scale/2.*Vector(math.cos(2*t) * (3 + math.cos(5*t)), math.sin(2*t) * (3 + math.cos(5*t)), math.sin(5*t))
-    saveSTL("cinquefoil.stl", [ ( (255,255,0), sweep(cinqueFoilPath, section, 0, 2*math.pi, .05) ) ] )
-    saveSCAD("cinquefoil.scad", [ ( (255,255,0), sweep(cinqueFoilPath, section, 0, 2*math.pi, .05, scad=True, cacheTriangulation=True) ) ] )
+    saveSTL("cinquefoil.stl", sweep(cinqueFoilPath, section, 0, 2*math.pi, .05, color=(1.,1.,0.)))
+    saveSCAD("cinquefoil.scad", sweep(cinqueFoilPath, section, 0, 2*math.pi, .05, scad=True, cacheTriangulation=True, color=(1.,1.,0.)))
              
     # screw thread parametrized by number of turns
     screwLength = 25
@@ -271,8 +282,8 @@ if __name__ == '__main__':
         angle = 2 * math.pi * t
         return Vector( 0.5 * shaftDiameter * math.cos(angle), 0.5 * shaftDiameter * math.sin(angle), t * screwLength / nTurns )
     screw = []
-    screw.append( ( (0,0,255), sweep(threadPath, threadSection, 0, nTurns, 1./16, upright=Vector(0,0,1), 
-            keepSectionUpright=True, closed=False, cacheTriangulation=False, scad=True)) )
+    screw += sweep(threadPath, threadSection, 0, nTurns, 1./16, upright=Vector(0,0,1), 
+            keepSectionUpright=True, closed=False, cacheTriangulation=False, scad=True, color=(0.,0.,1.))
     
     # this could be just a cylinder in OpenSCAD, but it's fun to show how to do it using sweep
     circularPrecision = 32
@@ -280,8 +291,8 @@ if __name__ == '__main__':
     baseSection = adjDiameter/2 * Vector( cmath.exp(2j * math.pi * k / circularPrecision) for k in range(circularPrecision) )
     shaftPath = lambda t : Vector(0, 0, t * screwLength )
     
-    screw.append( ( (0,0,128), sweep(shaftPath, lambda t:baseSection, 0, 1, 1, upright=(1,0,0), scad=True, keepSectionUpright=True, 
-            closed=False, cacheTriangulation=True )))
+    screw += sweep(shaftPath, baseSection, 0, 1, 1, upright=(1,0,0), scad=True, keepSectionUpright=True, 
+            closed=False, cacheTriangulation=True, color=(0.,0.,0.5) )
     
     saveSCAD("screwthread.scad", screw)
         
