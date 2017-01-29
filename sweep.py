@@ -272,7 +272,7 @@ if __name__ == '__main__':
         return Vector( 0.5 * shaftDiameter * math.cos(angle), 0.5 * shaftDiameter * math.sin(angle), t * screwLength / nTurns )
     screw = []
     screw.append( ( (0,0,255), sweep(threadPath, threadSection, 0, nTurns, 1./16, upright=Vector(0,0,1), 
-            keepSectionUpright=True, closed=False, cacheTriangulation=True, scad=True)) )
+            keepSectionUpright=True, closed=False, cacheTriangulation=False, scad=True)) )
     
     # this could be just a cylinder in OpenSCAD, but it's fun to show how to do it using sweep
     circularPrecision = 32
