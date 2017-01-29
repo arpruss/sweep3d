@@ -236,23 +236,37 @@ if __name__ == '__main__':
     saveSCAD("cinquefoil.scad", [ ( (255,255,0), sweep(cinqueFoilPath, section, 0, 2*math.pi, .05, scad=True, cacheTriangulation=True) ) ] )
              
     # screw thread parametrized by number of turns
-    screwLength = 25 # this is nominal: the shaft will stick out upwards to accommodate the last bit of thread
+    screwLength = 25
     shaftDiameter = 10
     pitch = 5
     nTurns = screwLength / float(pitch)
-    taperLength = 0.4 # in turns
+    bottomTaperLength = 0.4 # in turns
+    topTaperLength = 0.5 # in turns
+    topTaperTaperFraction = 0.4 # the last part of the top taper is more aggressive
     threadBase = Vector( Vector(0,-0.5), Vector(0.5,0), Vector(0,0.5) )
     threadHeightPerPitch = 0.75 # fraction of pitch taken up by thread
     
-    # draw thread
+    # draw thread with tapers: the bottom taper simply makes the thread disappear; the upper taper turns the
+    # thread asymmetric and tapers the top half of it away
     def threadSection(t): # if you change it so it's not affine, you'll have to disable triangulation caching
-        if t < taperLength:
-            fraction = t/taperLength
+        if t < bottomTaperLength:
+            # a symmetric thread taper on the bottom
+            fraction = t/bottomTaperLength
             if fraction < 0.01:
                 fraction = 0.01 # we don't want a degenerate section
+            return threadHeightPerPitch * pitch * fraction * threadBase
+        elif t > nTurns - topTaperLength:
+            # an asymmetric thread taper on the top
+            fraction = (nTurns-t) / topTaperLength
+            if fraction < 0.01:
+                fraction = 0.01 # avoid degeneracy
+            adjustedBase = Vector( Vector(v.x, fraction*v.y) if v.y>0 else v for v in threadBase )
+            if fraction < topTaperTaperFraction:
+                # at this point, start making the whole thing disappear
+                adjustedBase = fraction / topTaperTaperFraction * adjustedBase
+            return threadHeightPerPitch * pitch * adjustedBase
         else:
-            fraction = 1.
-        return threadHeightPerPitch * pitch * fraction * threadBase
+            return threadHeightPerPitch * pitch * threadBase
     def threadPath(t):
         angle = 2 * math.pi * t
         return Vector( 0.5 * shaftDiameter * math.cos(angle), 0.5 * shaftDiameter * math.sin(angle), t * screwLength / nTurns )
@@ -263,9 +277,8 @@ if __name__ == '__main__':
     # this could be just a cylinder in OpenSCAD, but it's fun to show how to do it using sweep
     circularPrecision = 32
     adjDiameter = 1.0000001 * shaftDiameter / math.cos(math.pi/circularPrecision)
-    adjHeight = screwLength + pitch * threadHeightPerPitch / 2
     baseSection = adjDiameter/2 * Vector( cmath.exp(2j * math.pi * k / circularPrecision) for k in range(circularPrecision) )
-    shaftPath = lambda t : Vector(0, 0, t * adjHeight )
+    shaftPath = lambda t : Vector(0, 0, t * screwLength )
     
     screw.append( ( (0,0,128), sweep(shaftPath, lambda t:baseSection, 0, 1, 1, upright=(1,0,0), scad=True, keepSectionUpright=True, 
             closed=False, cacheTriangulation=True )))
