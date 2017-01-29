@@ -32,12 +32,14 @@ def toColorSCAD(polys, moduleName="object1"):
     out += "}\n"
     return out
         
-def saveColorSCAD(filename, polys, moduleName="object1"):
+def saveSCAD(filename, polys, moduleName="object1", quiet=False):
+    if not quiet: sys.stderr.write("Saving %s\n" % filename)
     with open(filename, "w") as f:
         f.write(toColorSCAD(polys, moduleName=moduleName))
         f.write("\n" + moduleName + "();")
 
-def saveColorSTL(filename, mesh, swapYZ=False):
+def saveSTL(filename, mesh, swapYZ=False, quiet=False):
+    if not quiet: sys.stderr.write("Saving %s\n" % filename)
     minY = float("inf")
     minVector = Vector(float("inf"),float("inf"),float("inf"))
     numTriangles = 0
@@ -66,8 +68,9 @@ def saveColorSTL(filename, mesh, swapYZ=False):
                 f.write(pack("<H", color))            
                 
 class SectionAligner(object):
-    def __init__(self, upright=Vector(0,0,1)):
+    def __init__(self, upright=Vector(0,0,1), keepSectionUpright=False):
         self.upright = upright.normalize()
+        self.keepSectionUpright = keepSectionUpright
         
         # perp will be perpendicular to upright, and serve as a default direction for the cross-section's normal
         m = min(abs(comp) for comp in upright)
@@ -90,17 +93,20 @@ class SectionAligner(object):
         # Then it will be rotated to match horizontal angle of the knot direction (which had better not be straight up or down along upright) 
         m2 = Matrix.rotateVectorToVector(self.perp1, projDirection)
         
-        # Finally, we will tilt it to match the direction
-        m3 = Matrix.rotateVectorToVector(projDirection, direction)
-        
-        m = m3 * m2 * self.m1
+        if self.keepSectionUpright:
+            m = m2 * self.m1
+        else:
+            # Finally, we will tilt it up or down to match the direction
+            m3 = Matrix.rotateVectorToVector(projDirection, direction)
+            m = m3 * m2 * self.m1
         
         for v in sectionPoints:
             out.append( m * Vector(v) + position )
 
         return out
                 
-def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1), solid=False, clockwise=False, scad=False, cacheTriangulation=False, closed=True):
+def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1), 
+        solid=False, clockwise=False, scad=False, cacheTriangulation=False, closed=True, keepSectionUpright=False):
     """
     The upright vector specifies the preferred pointing direction for the y-axis in the input sections.
     The tangent to the mainPain should never be close to parallel to the upright vector. E.g., for a mainly
@@ -116,16 +122,17 @@ def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1), solid=False, 
         solid = True
         clockwise = True
         
+    upright = Vector(upright)
     cachedTriangulation = None
 
-    aligner = SectionAligner(upright=upright)
+    aligner = SectionAligner(upright=upright, keepSectionUpright=keepSectionUpright)
     
     def getCrossSection(s, t):
         f1 = mainPath(t)
-        if closed or t+tstep/2 <= t2:
+        if closed or t+tstep/2. <= t2:
             direction = mainPath( (t-t1+tstep/2.)%(t2-t1) + t1 ) - f1
         else:
-            direction = f1 - mainPath( t-tstep/2 )
+            direction = f1 - mainPath( t-tstep/2. )
         return aligner.align(s, direction, f1)
         
     if (solid or not closed) and cacheTriangulation:
@@ -211,7 +218,7 @@ if __name__ == '__main__':
     rings.append( ( (0,0,255), sweep(path3, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=True, cacheTriangulation=True) ) )
 #    rings.append( ( (255,0,0), sweep(lambda t:Vector(t,0,0), section, 0,6,.1,scad=True, closed=False)))
 
-    saveColorSCAD("borromean.scad", rings)
+    saveSCAD("borromean.scad", rings)
 
     rings = []
     rings.append( ( (255,0,0), sweep(path1, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=False) ) )
@@ -219,12 +226,49 @@ if __name__ == '__main__':
     rings.append( ( (0,0,255), sweep(path3, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=False) ) )
 #    rings.append( ( (255,0,0), sweep(lambda t:Vector(t,0,0), section, 0,6,.1,closed=False)))
 
-    saveColorSTL("borromean.stl", rings)
+    saveSTL("borromean.stl", rings)
 
     rings = []
     # cinquefoil from http://www.maa.org/sites/default/files/images/upload_library/23/stemkoski/knots/page6.html
     
     cinqueFoilPath = lambda t: scale/2.*Vector(math.cos(2*t) * (3 + math.cos(5*t)), math.sin(2*t) * (3 + math.cos(5*t)), math.sin(5*t))
-    saveColorSTL("cinquefoil.stl", [ ( (255,255,0), sweep(cinqueFoilPath, section, 0, 2*math.pi, .05) ) ] )
-    saveColorSCAD("cinquefoil.scad", [ ( (255,255,0), sweep(cinqueFoilPath, section, 0, 2*math.pi, .05, scad=True, cacheTriangulation=True) ) ] )
-                
+    saveSTL("cinquefoil.stl", [ ( (255,255,0), sweep(cinqueFoilPath, section, 0, 2*math.pi, .05) ) ] )
+    saveSCAD("cinquefoil.scad", [ ( (255,255,0), sweep(cinqueFoilPath, section, 0, 2*math.pi, .05, scad=True, cacheTriangulation=True) ) ] )
+             
+    # screw thread parametrized by number of turns
+    screwLength = 25 # this is nominal: the shaft will stick out upwards to accommodate the last bit of thread
+    shaftDiameter = 10
+    pitch = 5
+    nTurns = screwLength / float(pitch)
+    taperLength = 0.4 # in turns
+    threadBase = Vector( Vector(0,-0.5), Vector(0.5,0), Vector(0,0.5) )
+    threadHeightPerPitch = 0.75 # fraction of pitch taken up by thread
+    
+    # draw thread
+    def threadSection(t): # if you change it so it's not affine, you'll have to disable triangulation caching
+        if t < taperLength:
+            fraction = t/taperLength
+            if fraction < 0.01:
+                fraction = 0.01 # we don't want a degenerate section
+        else:
+            fraction = 1.
+        return threadHeightPerPitch * pitch * fraction * threadBase
+    def threadPath(t):
+        angle = 2 * math.pi * t
+        return Vector( 0.5 * shaftDiameter * math.cos(angle), 0.5 * shaftDiameter * math.sin(angle), t * screwLength / nTurns )
+    screw = []
+    screw.append( ( (0,0,255), sweep(threadPath, threadSection, 0, nTurns, 1./16, upright=Vector(0,0,1), 
+            keepSectionUpright=True, closed=False, cacheTriangulation=True, scad=True)) )
+    
+    # this could be just a cylinder in OpenSCAD, but it's fun to show how to do it using sweep
+    circularPrecision = 32
+    adjDiameter = 1.0000001 * shaftDiameter / math.cos(math.pi/circularPrecision)
+    adjHeight = screwLength + pitch * threadHeightPerPitch / 2
+    baseSection = adjDiameter/2 * Vector( cmath.exp(2j * math.pi * k / circularPrecision) for k in range(circularPrecision) )
+    shaftPath = lambda t : Vector(0, 0, t * adjHeight )
+    
+    screw.append( ( (0,0,128), sweep(shaftPath, lambda t:baseSection, 0, 1, 1, upright=(1,0,0), scad=True, keepSectionUpright=True, 
+            closed=False, cacheTriangulation=True )))
+    
+    saveSCAD("screwthread.scad", screw)
+        
