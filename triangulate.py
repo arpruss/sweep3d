@@ -61,9 +61,8 @@ def triangulate(polygon):
                 p = polygon[j % n]
                 # check if p is inside
                 c1 = cross_z(p-a, ba)
-                if c1 * cross_z(p-b, cb) > 0:
-                    if c1 * cross_z(p-c, ac) > 0:
-                        return False
+                if c1 * cross_z(p-b, cb) > 0 and c1 * cross_z(p-c, ac) > 0:
+                    return False
             j += 1
         return True
         
@@ -106,7 +105,7 @@ def polygonsToSVG(vertices, polys):
     svgArray.append('<?xml version="1.0" standalone="no"?>')
     svgArray.append('<svg width="%fmm" height="%fmm" viewBox="0 0 %f %f" xmlns="http://www.w3.org/2000/svg" version="1.1">'%(maxX-minX,maxY-minY,maxX-minX,maxY-minY))
     for p in polys:
-        path = '<path stroke="black" stroke-width="0.25px" fill="yellow" d="'
+        path = '<path stroke="black" stroke-width="0.01mm" opacity="0.5" fill="yellow" d="'
         for i in range(len(p)+1):
             path += 'L' if i else 'M'
             path += '%.6f %.6f ' % ( vertices[p[i % len(p)]] - (minX,minY) )
@@ -123,7 +122,7 @@ if __name__ == '__main__':
     if len(sys.argv) >= 2:
         m = int(sys.argv[1])
     else:
-        m = 16
+        m = 18
     polygon = [ cmath.exp(2j * math.pi * k / m) * (10 if k%2 else 18) for k in range(m) ]
 #    polygon = [ cmath.exp(2j * math.pi * k / m) * (18 if k%2 else 18) for k in range(m) ]
     t = time.time()
