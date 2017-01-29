@@ -116,12 +116,6 @@ def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1), solid=False, 
         solid = True
         clockwise = True
         
-    def orderPolys(polys):
-        if clockwise:
-            return [tuple(reversed(p)) for p in polys]
-        else:
-            return polys
-    
     cachedTriangulation = None
 
     aligner = SectionAligner(upright=upright)
@@ -161,7 +155,7 @@ def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1), solid=False, 
         
         def applyTriangulation(points,tr,clockwise=False):
             if clockwise:
-                return [ tuple(reversed( (points[t[0]],points[t[1]],points[t[2]]))) for t in tr ]
+                return [ (points[t[2]],points[t[1]],points[t[0]]) for t in tr ]
             else:
                 return [ (points[t[0]],points[t[1]],points[t[2]]) for t in tr ]
 
@@ -170,8 +164,12 @@ def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1), solid=False, 
             output += applyTriangulation(curCrossSection, curTriangulation, clockwise=clockwise)
         
         def triangulateTube(i):
-            return orderPolys( [ ( curCrossSection[i], nextCrossSection[i], nextCrossSection[(i+1)%n] ), 
-                     ( nextCrossSection[(i+1)%n], curCrossSection[(i+1)%n], curCrossSection[i] ) ] )
+            if clockwise:
+                return [ ( nextCrossSection[(i+1)%n], nextCrossSection[i], curCrossSection[i] ), 
+                         ( curCrossSection[i], curCrossSection[(i+1)%n], nextCrossSection[(i+1)%n] ) ]
+            else:
+                return [ ( curCrossSection[i], nextCrossSection[i], nextCrossSection[(i+1)%n] ), 
+                         ( nextCrossSection[(i+1)%n], curCrossSection[(i+1)%n], curCrossSection[i] ) ]
                      
         if solid:
             polyhedron = applyTriangulation(curCrossSection, curTriangulation, clockwise=clockwise)

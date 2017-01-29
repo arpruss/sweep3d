@@ -52,32 +52,24 @@ def triangulate(polygon):
         return True
         
     ear = [isEar(i) for i in range(n)]
-
+    
     while n >= 3:
-        i = 0
-        foundEar = False
-        for i in range(0,n):
-            if ear[i]:
-                triangles.append((index[i-1],index[i],index[(i+1) % n]))
-                # TODO: less deleting!
-                del polygon[i]
-                del reflex[i]
-                del ear[i]
-                del index[i]
-                n -= 1
-                if reflex[i-1]:
-                    reflex[i-1] = isReflex(i-1)
-                if reflex[i % n]:
-                    reflex[i % n] = isReflex(i % n)
-                if not reflex[i-1]:
-                    ear[i-1] = isEar(i-1)
-                if not reflex[i % n]:
-                    ear[i % n] = isEar(i % n)
-                foundEar = True
-                break
-            
-        assert foundEar
-        
+        i = ear.index(True)
+        triangles.append((index[i-1],index[i],index[(i+1) % n]))
+        # TODO: less deleting!
+        del polygon[i]
+        del reflex[i]
+        del ear[i]
+        del index[i]
+        n -= 1
+        # it's tempting to optimize here for the case where n==3, but that would
+        # probably be counterproductive, as the n==3 test would run O(n) times
+        if reflex[i-1]:
+            reflex[i-1] = isReflex(i-1)
+        if reflex[i % n]:
+            reflex[i % n] = isReflex(i % n)
+        ear[i-1] = isEar(i-1)
+        ear[i % n] = isEar(i % n)
     return triangles
 
 def polygonsToSVG(vertices, polys):
@@ -90,7 +82,6 @@ def polygonsToSVG(vertices, polys):
     svgArray = []
     svgArray.append('<?xml version="1.0" standalone="no"?>')
     svgArray.append('<svg width="%fmm" height="%fmm" viewBox="0 0 %f %f" xmlns="http://www.w3.org/2000/svg" version="1.1">'%(maxX-minX,maxY-minY,maxX-minX,maxY-minY))
-    svgArray.append('\n')
     for p in polys:
         path = '<path stroke="black" stroke-width="0.25px" fill="yellow" d="'
         for i in range(len(p)+1):
@@ -104,6 +95,17 @@ def polygonsToSVG(vertices, polys):
 if __name__ == '__main__':
     import cmath
     import math
-    polygon = [ cmath.exp(2j * math.pi * k / 20.) * (10 if k%2 else 15) for k in range(20) ]
-    print polygonsToSVG(polygon, triangulate(polygon))
+    import sys
+    import time
+    if len(sys.argv) >= 2:
+        m = int(sys.argv[1])
+    else:
+        m = 16
+    polygon = [ cmath.exp(2j * math.pi * k / m) * (10 if k%2 else 18) for k in range(m) ]
+    t = time.time()
+    tr = triangulate(polygon)
+    t = time.time() - t
+    sys.stderr.write("Time %.4fs\n" % t)
+    #sys.stderr.write(str(tr)+"\n")
+    print polygonsToSVG(polygon, tr)
     

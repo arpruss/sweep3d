@@ -61,7 +61,9 @@ class Vector(tuple):
         return self*(1./b)
             
     def __getitem__(self,key):
-        if key >= len(self):
+        if isinstance(key, slice):
+            return type(self)(tuple.__getitem__(self, key))
+        elif key >= len(self):
             if len(self)>0 and hasattr(self[0],'__getitem__'):
                 return type(self[0])(0. for i in range(len(self[0])))
             else:
