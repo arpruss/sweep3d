@@ -55,7 +55,7 @@ def saveSTL(filename, mesh, swapYZ=False, quiet=False):
         f.write(pack("80s",b''))
         f.write(pack("<I",numTriangles))
         for rgb,tri in mesh:
-            rgb = tuple(int(0.5 + 255 * comp) for comp in rgb)
+            rgb = tuple(min(255,max(0,int(0.5 + 255 * comp))) for comp in rgb)
             color = 0x8000 | ( (rgb[0] >> 3) << 10 ) | ( (rgb[1] >> 3) << 5 ) | ( (rgb[2] >> 3) << 0 )
             normal = (Vector(tri[1])-Vector(tri[0])).cross(Vector(tri[2])-Vector(tri[0])).normalize()
             f.write(pack("<3f", *(matrix*normal)))
@@ -118,6 +118,7 @@ def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1),
     if not hasattr(section, '__call__'):
         section0 = section
         section = lambda t : section0
+        cacheTriangulation = True
     
     if not hasattr(color, '__call__'):
         color0 = color
@@ -227,7 +228,6 @@ if __name__ == '__main__':
     rings += sweep(path1, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=True, cacheTriangulation=True, color=(1.,0.,0.))
     rings += sweep(path2, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=True, cacheTriangulation=True, color=(0.,1.,0.))
     rings += sweep(path3, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=True, cacheTriangulation=True, color=(0.,0.,1.))
-#    rings.append( ( (1.,0,0), sweep(lambda t:Vector(t,0,0), section, 0,6,.1,scad=True, closed=False)))
 
     saveSCAD("borromean.scad", rings)
 
@@ -235,7 +235,6 @@ if __name__ == '__main__':
     rings += sweep(path1, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=False, color=(1.,0.,0.))
     rings += sweep(path2, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=False, color=(0.,1.,0.))
     rings += sweep(path3, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=False, color=(0.,0.,1.))
-#    rings.append( ( (1.,0,0), sweep(lambda t:Vector(t,0,0), section, 0,6,.1,closed=False)))
 
     saveSTL("borromean.stl", rings)
 
@@ -243,47 +242,26 @@ if __name__ == '__main__':
     # cinquefoil from http://www.maa.org/sites/default/files/images/upload_library/23/stemkoski/knots/page6.html
     
     cinqueFoilPath = lambda t: scale/2.*Vector(math.cos(2*t) * (3 + math.cos(5*t)), math.sin(2*t) * (3 + math.cos(5*t)), math.sin(5*t))
-    saveSTL("cinquefoil.stl", sweep(cinqueFoilPath, section, 0, 2*math.pi, .05, color=(1.,1.,0.)))
-    saveSCAD("cinquefoil.scad", sweep(cinqueFoilPath, section, 0, 2*math.pi, .05, scad=True, cacheTriangulation=True, color=(1.,1.,0.)))
+    color = lambda t: (1.,0.5*(math.cos(t)+1),0.)
+    saveSTL("cinquefoil.stl", sweep(cinqueFoilPath, section, 0, 2*math.pi, .05, color=color))
+    saveSCAD("cinquefoil.scad", sweep(cinqueFoilPath, section, 0, 2*math.pi, .05, scad=True, cacheTriangulation=True, color=color))
              
     # screw thread parametrized by number of turns
     screwLength = 25
     shaftDiameter = 10
     pitch = 5
     nTurns = screwLength / float(pitch)
-    bottomTaperLength = 0.4 # in turns
-    topTaperLength = 0.5 # in turns
-    topTaperTaperFraction = 0.4 # the last part of the top taper is more aggressive
     threadBase = Vector( Vector(0,-0.5), Vector(0.5,0), Vector(0,0.5) )
     threadHeightPerPitch = 0.75 # fraction of pitch taken up by thread
     
-    # draw thread with tapers: the bottom taper simply makes the thread disappear; the upper taper turns the
-    # thread asymmetric and tapers the top half of it away
-    def threadSection(t): # if you change it so it's not affine, you'll have to disable triangulation caching
-        if t < bottomTaperLength:
-            # a symmetric thread taper on the bottom
-            fraction = t/bottomTaperLength
-            if fraction < 0.01:
-                fraction = 0.01 # we don't want a degenerate section
-            return threadHeightPerPitch * pitch * fraction * threadBase
-        elif t > nTurns - topTaperLength:
-            # an asymmetric thread taper on the top
-            fraction = (nTurns-t) / topTaperLength
-            if fraction < 0.01:
-                fraction = 0.01 # avoid degeneracy
-            adjustedBase = Vector( Vector(v.x, fraction*v.y) if v.y>0 else v for v in threadBase )
-            if fraction < topTaperTaperFraction:
-                # at this point, start making the whole thing disappear
-                adjustedBase = fraction / topTaperTaperFraction * adjustedBase
-            return threadHeightPerPitch * pitch * adjustedBase
-        else:
-            return threadHeightPerPitch * pitch * threadBase
     def threadPath(t):
         angle = 2 * math.pi * t
         return Vector( 0.5 * shaftDiameter * math.cos(angle), 0.5 * shaftDiameter * math.sin(angle), t * screwLength / nTurns )
+    color = lambda t : Vector(0., t/nTurns, 1.)
+
     screw = []
-    screw += sweep(threadPath, threadSection, 0, nTurns, 1./16, upright=Vector(0,0,1), 
-            keepSectionUpright=True, closed=False, cacheTriangulation=False, scad=True, color=(0.,0.,1.))
+    screw += sweep(threadPath, threadHeightPerPitch * pitch * threadBase, -0.5, nTurns+0.5, 1./16, upright=Vector(0,0,1), 
+            keepSectionUpright=True, closed=False, cacheTriangulation=False, scad=True, color=color)
     
     # this could be just a cylinder in OpenSCAD, but it's fun to show how to do it using sweep
     circularPrecision = 32
@@ -291,8 +269,12 @@ if __name__ == '__main__':
     baseSection = adjDiameter/2 * Vector( cmath.exp(2j * math.pi * k / circularPrecision) for k in range(circularPrecision) )
     shaftPath = lambda t : Vector(0, 0, t * screwLength )
     
-    screw += sweep(shaftPath, baseSection, 0, 1, 1, upright=(1,0,0), scad=True, keepSectionUpright=True, 
-            closed=False, cacheTriangulation=True, color=(0.,0.,0.5) )
+    screw += sweep(shaftPath, baseSection, 0, 1, .1, upright=(1,0,0), scad=True, keepSectionUpright=True, 
+            closed=False, cacheTriangulation=True)
+            
+    screwSCAD = toSCADModule(screw, "screw")
+    screwSCAD += "render(convexity=2) intersection() {\n screw();\n cylinder(d=%.6f,h=%.6f,$fn=4);\n}\n" % (shaftDiameter*4,screwLength)
     
-    saveSCAD("screwthread.scad", screw)
-        
+    sys.stderr.write("Saving screwthread.scad\n")
+    with open("screwthread.scad", "wb") as f: f.write(screwSCAD)
+    
