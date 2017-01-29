@@ -39,15 +39,31 @@ def triangulate(polygon):
         return cross_z(polygon[i]-polygon[i-1], polygon[(i+1) % n]-polygon[i]) < 0
         
     reflex = [isReflex(i) for i in range(n)]
+
+    try:
+        reflex.index(True)
+    except:
+        # no reflex vertices, so convex polygon
+        for i in range(1,n-1):
+            triangles.append((index[0],index[i],index[i+1]))
+        return triangles
     
     def isEar(i):
         if reflex[i]:
             return False
         a,b,c = polygon[i-1],polygon[i],polygon[(i+1) % n]
         j = i+2
+        ba = b-a
+        cb = c-b
+        ac = a-c
         while j % n != (i-1) % n:
-            if reflex[j % n] and pointInside(polygon[j % n],a,b,c):
-                return False
+            if reflex[j % n]:
+                p = polygon[j % n]
+                # check if p is inside
+                c1 = cross_z(p-a, ba)
+                if c1 * cross_z(p-b, cb) > 0:
+                    if c1 * cross_z(p-c, ac) > 0:
+                        return False
             j += 1
         return True
         
@@ -109,10 +125,11 @@ if __name__ == '__main__':
     else:
         m = 16
     polygon = [ cmath.exp(2j * math.pi * k / m) * (10 if k%2 else 18) for k in range(m) ]
+#    polygon = [ cmath.exp(2j * math.pi * k / m) * (18 if k%2 else 18) for k in range(m) ]
     t = time.time()
     tr = triangulate(polygon)
     t = time.time() - t
     sys.stderr.write("Time %.4fs\n" % t)
-    #sys.stderr.write(str(tr)+"\n")
+#    sys.stderr.write(str(tr)+"\n")
     print polygonsToSVG(polygon, tr)
     
