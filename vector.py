@@ -81,6 +81,25 @@ class Vector(tuple):
     def cross(self,b):
         return Vector(self.y * b.z - self.z * b.y, self.z * b.x - self.x * b.z, self.x * b.y - self.y * b.x)
         
+    def perpendicular(self):
+        """
+        Return one normalized perpendicular vector.
+        In 2D, that's enough for a basis.
+        In 3D, you need another, but can generate via cross-product.
+        In other dimensions, raise NotImplementedError
+        """
+        if len(self) == 2:
+            return Vector(-self.y, self.x)
+        elif len(self) == 3:
+            if abs(self.x) <= min(abs(self.y),abs(self.z)):
+                return Vector(0.,-self.z,self.y).normalize()
+            elif abs(self.y) <= min(abs(self.x),abs(self.z)):
+                return Vector(-self.z,0.,self.x).normalize()
+            else:
+                return Vector(-self.y,self.x,0.).normalize()
+        else:
+            raise NotImplementedError
+        
     @property
     def x(self):
         if len(self) < 1:
