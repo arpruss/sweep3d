@@ -220,7 +220,7 @@ def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1),
     
 def scadScrew(screwLength, shaftDiameter, pitch, threadHeightPerPitch = 0.75, 
         threadBase = Vector( Vector(0,-0.5), Vector(0.5,0), Vector(0,0.5) ), 
-        upright=(0,0,1), start=(0,0,0), moduleName="screw", resolution=32, leftHanded=False):
+        upright=(0,0,1), start=(0,0,0), moduleName="screw", resolution=32, leftHanded=False, clip=True):
         
     nTurns = screwLength / float(pitch)
     
@@ -247,8 +247,10 @@ def scadScrew(screwLength, shaftDiameter, pitch, threadHeightPerPitch = 0.75,
     screw += sweep(shaftPath, baseSection, 0, 1, 1, upright=Vector(upright).perpendicular(), scad=True, 
             keepSectionUpright=True, closed=False, cacheTriangulation=True)
             
-    screwSCAD = toSCADModule(screw, moduleName+"_unclipped")
-    screwSCAD += """
+    screwSCAD = toSCADModule(screw, moduleName+("_unclipped" if clip else ""))
+    
+    if clip:
+        screwSCAD += """
 
 module %s() {
   render(convexity=1) difference() {
@@ -299,8 +301,25 @@ if __name__ == '__main__':
     saveSTL("cinquefoil.stl", sweep(cinqueFoilPath, section, 0, 2*math.pi, .05, color=color))
     saveSCAD("cinquefoil.scad", sweep(cinqueFoilPath, section, 0, 2*math.pi, .05, scad=True, cacheTriangulation=True, color=color))
              
-    screw = scadScrew(25, 10, 5, threadHeightPerPitch=0.75, resolution=40)
-    screw += "\nscrew();\n"
+    screw = scadScrew(25, 10, 5, threadHeightPerPitch=0.75, resolution=40, moduleName="screw")
+
+    tolerance = 1
+    screw += scadScrew(12, 10+tolerance*2, 5, threadHeightPerPitch=(0.75*5.+tolerance*2)/5., resolution=40, moduleName="oversize_screw", clip=False)
+    screw += """
+
+module nut() {
+    render(convexity=1)
+    difference() {
+        cylinder(d=30,h=10,$fn=6);
+        translate([0,0,-1]) oversize_screw();
+    }
+}
+    
+translate([0,0,10-0.001]) screw();
+cylinder(d=30,h=10,$fn=6);
+translate([35,0,0]) nut();
+"""
+    
     sys.stderr.write("Saving screw.scad\n")
     with open("screw.scad", "wb") as f: f.write(screw)
     
