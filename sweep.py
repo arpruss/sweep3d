@@ -7,6 +7,13 @@ from vector import *
 from triangulate import *
 
 def toSCADModule(polys, moduleName):
+    """
+    INPUT:
+    polys: list of (color,polyhedra) pairs (clockwise triangles)
+    moduleName: OpenSCAD module name
+    
+    OUTPUT: string with OpenSCAD code implementing the polys
+    """
     scad = []
     scad.append("module " +moduleName+ "() {")
     for rgb,poly in polys:
@@ -33,12 +40,24 @@ def toSCADModule(polys, moduleName):
     return "\n".join(scad)
 
 def saveSCAD(filename, polys, moduleName="object1", quiet=False):
+    """
+    filename: filename to write OpenSCAD file
+    polys: list of (color,polyhedra) pairs (clockwise triangles)
+    moduleName: OpenSCAD module name
+    quiet: give no status message if set
+    """
     if not quiet: sys.stderr.write("Saving %s\n" % filename)
     with open(filename, "w") as f:
         f.write(toSCADModule(polys, moduleName))
         f.write("\n" + moduleName + "();\n")
 
 def saveSTL(filename, mesh, swapYZ=False, quiet=False):
+    """
+    filename: filename to save STL file
+    mesh: list of (color,triangle) pairs (counterclockwise)
+    swapYZ: should Y/Z axes be swapped?
+    quiet: give no status message if set
+    """
     if not quiet: sys.stderr.write("Saving %s\n" % filename)
     minY = float("inf")
     minVector = Vector(float("inf"),float("inf"),float("inf"))
@@ -62,10 +81,13 @@ def saveSTL(filename, mesh, swapYZ=False, quiet=False):
         f.write(pack("80s",b''))
         f.write(pack("<I",numTriangles))
         for rgb,tri in mesh:
-            if rgb is None:
+            if mono:
                 color = 0
             else:
-                rgb = tuple(min(255,max(0,int(0.5 + 255 * comp))) for comp in rgb)
+                if rgb is None:
+                    rgb = (255,255,255)
+                else:
+                    rgb = tuple(min(255,max(0,int(0.5 + 255 * comp))) for comp in rgb)
                 color = 0x8000 | ( (rgb[0] >> 3) << 10 ) | ( (rgb[1] >> 3) << 5 ) | ( (rgb[2] >> 3) << 0 )
             normal = (Vector(tri[1])-Vector(tri[0])).cross(Vector(tri[2])-Vector(tri[0])).normalize()
             f.write(pack("<3f", *(matrix*normal)))
@@ -113,16 +135,38 @@ class SectionAligner(object):
                 
 def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1), 
         solid=False, clockwise=False, scad=False, cacheTriangulation=False, closed=True, keepSectionUpright=False,
-        color=None):
+        color=None, tangentPrecision=0.5):
     """
-    The upright vector specifies the preferred pointing direction for the y-axis in the input sections.
-    The tangent to the mainPain should never be close to parallel to the upright vector. E.g., for a mainly
-    horizontal knot, the default (0,0,1) setting should work.
+    INPUTS:
+    mainPath: function of t specifying the 3D path to sweep along -- output can be a vector or tuple
+    section: either a list or a function of t returning a list, with contents being 2D points to sweep along the mainPath;
+        the number of points must be the same for all values of t, and close values of t should result in similar
+        sections
+    t1,t2: start and end of t parameter for mainPath
+    tstep: amount to increment t per step
+    upright: vector to align the y-axis of the section towards; if the tangent of the mainPath ever aligns with upright,
+        bad things will happen (numerical instability or code crash); ideally, you should point the upright vector away
+        from the approximate plane of the mainPath curve
+    solid: if True, returns a list of (color,polyhedron) pairs, with polyhedra composed of triangular faces; the polyhedra
+        then should be joined together with a CSG program like OpenSCAD;
+        if False, returns a list of (color,triangle) pairs for a mesh
+    clockwise: if True, the order in a triangular face is clockwise when viewed from outside a solid
+    scad: if True, sets solid=True and clockwise=True for OpenSCAD output
+    cacheTriangulation: if True, it's assumed that all values of the section function can be triangulated in the same way; 
+        the easiest way to guarantee this is to ensure that the different values of the section function are affine transforms
+        of each other
+    closed: specify whether the mainPath is a closed curve or not
+    keepSectionUpright: if True, the y-axis of the section is exactly pointed along the upright vector; if False, the y-axis
+        of the section is only pointed along the upright vector when the mainPath moves in the plane orthogonal to the upright
+        vector; otherwise, the y-axis of the section gets tilted up or down to ensure that the section is normal to the
+        mainPath's tangent
+    color: either an RGB color (tuple/list of floats from 0 to 1) or a function from t to RGB colors (allowing a sweep varying
+        in color); you can also specify None for the color, which if consistently done will generate a monochrome OpenSCAD file
+        or STL mesh
+    tangentPrecision: fraction of tstep used for calculating tangents
     
-    cacheTriangulation optimizes in case all the section triangulations are the same. The typical case is where
-    either the section is constant, or the different sections are affine transforms of one another.
-    
-    In polyhedron mode, each little piece of the knot is a separate polyhedron, appropriate for dumping into OpenSCAD.
+    OUTPUT:
+    list of (color,polyhedron) or (color,triangle) pairs
     """
     
     if not hasattr(section, '__call__'):
@@ -144,11 +188,11 @@ def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1),
     aligner = SectionAligner(upright=upright, keepSectionUpright=keepSectionUpright)
     
     def getCrossSection(s, t):
-        f1 = mainPath(t)
-        if closed or t+tstep/2. <= t2:
-            direction = mainPath( (t-t1+tstep/2.)%(t2-t1) + t1 ) - f1
+        f1 = Vector(mainPath(t))
+        if closed or t+tstep*tangentPrecision <= t2:
+            direction = Vector(mainPath( (t-t1+tstep*tangentPrecision)%(t2-t1) + t1 )) - f1
         else:
-            direction = f1 - mainPath( t-tstep/2. )
+            direction = f1 - Vector(mainPath( t-tstep*tangentPrecision ))
         return aligner.align(s, direction, f1)
         
     if (solid or not closed) and cacheTriangulation:
@@ -219,15 +263,37 @@ def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1),
     return output
     
 def scadScrew(screwLength, shaftDiameter, pitch, threadHeightPerPitch = 0.75, 
-        threadBase = Vector( Vector(0,-0.5), Vector(0.5,0), Vector(0,0.5) ), 
+        threadBase = ( (0,-0.5), (0.5,0), (0,0.5) ), 
         upright=(0,0,1), start=(0,0,0), moduleName="screw", resolution=32, tolerance=0., leftHanded=False, clip=True):
+    """
+    INPUTS:
+    screwLength: length of screw shaft
+    shaftDiameter: diameter of screw shaft
+    pitch: distance along screw between successive threads
+    threadHeightPerPitch: scale of thread cross-section relative to pitch; if the threadBase has height 1,
+        and threadHeigthPerPitch is 1, then the thread fills all of the pitch
+    threadBase: thread profile, the default being a 45-90-45 triangle
+    upright: direction of screw shaft
+    start: position of start of screw shaft
+    moduleName: name of OpenSCAD module containing this screw
+    resolution: number of points per turn
+    tolerance: thickens screw for subtracting from solids for female thread
+    leftHanded: if True, thread is left-handed (threadBase is automatically rotated by 180 degrees)
+    clip: if True, the thread doesn't stick out past the end of the shaft; of course, if making a real screw you generally want
+        that; but if you are just generating a screw shape for subtraction from a solid for female through-thread, then things 
+        will work faster without clipping
         
+    OUTPUT:
+    OpenSCAD module to generate the screw; if clipping is True, there will also be a moduleName_unclipped module generated
+    """    
+    
     nTurns = screwLength / float(pitch)
     
     if leftHanded:
-        threadBase = Vector( -v for v in threadBase )
+        threadBase = Vector( -Vector(v) for v in threadBase )
         sign = -1.
     else:
+        threadBase = Vector( Vector(v) for v in threadBase )
         sign = 1.
         
     upright = Vector(upright).normalize() 
