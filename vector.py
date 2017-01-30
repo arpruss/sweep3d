@@ -40,7 +40,7 @@ class Vector(tuple):
     def __rsub__(self,b):
         return type(self)(b[i]-self[i] for i in range(max(len(self),len(b))))
 
-    def __neg__(self,b):
+    def __neg__(self):
         return type(self)(-comp for comp in self)
 
     def __mul__(self,b):

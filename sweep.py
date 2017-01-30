@@ -220,13 +220,19 @@ def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1),
     
 def scadScrew(screwLength, shaftDiameter, pitch, threadHeightPerPitch = 0.75, 
         threadBase = Vector( Vector(0,-0.5), Vector(0.5,0), Vector(0,0.5) ), 
-        upright=(0,0,1), start=(0,0,0), moduleName="screw", resolution=32):
+        upright=(0,0,1), start=(0,0,0), moduleName="screw", resolution=32, leftHanded=False):
         
     nTurns = screwLength / float(pitch)
     
+    if leftHanded:
+        threadBase = Vector( -v for v in threadBase )
+        sign = -1.
+    else:
+        sign = 1.
+    
     def threadPath(t):
         angle = 2 * math.pi * t
-        return Vector( 0.5 * shaftDiameter * math.cos(angle), 0.5 * shaftDiameter * math.sin(angle), t * screwLength / nTurns ) + start
+        return Vector( 0.5 * shaftDiameter * math.cos(angle), 0.5 * sign * shaftDiameter * math.sin(angle), t * screwLength / nTurns ) + start
 
     screw = []
     screw += sweep(threadPath, threadHeightPerPitch * pitch * threadBase, -0.5, nTurns+0.5, 1./resolution, 
@@ -294,6 +300,7 @@ if __name__ == '__main__':
     saveSCAD("cinquefoil.scad", sweep(cinqueFoilPath, section, 0, 2*math.pi, .05, scad=True, cacheTriangulation=True, color=color))
              
     screw = scadScrew(25, 10, 5, threadHeightPerPitch=0.75, resolution=40)
+    screw += "\nscrew();\n"
     sys.stderr.write("Saving screw.scad\n")
     with open("screw.scad", "wb") as f: f.write(screw)
     
