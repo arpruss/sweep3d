@@ -220,7 +220,7 @@ def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1),
     
 def scadScrew(screwLength, shaftDiameter, pitch, threadHeightPerPitch = 0.75, 
         threadBase = Vector( Vector(0,-0.5), Vector(0.5,0), Vector(0,0.5) ), 
-        upright=(0,0,1), start=(0,0,0), moduleName="screw", resolution=32, leftHanded=False, clip=True):
+        upright=(0,0,1), start=(0,0,0), moduleName="screw", resolution=32, tolerance=0., leftHanded=False, clip=True):
         
     nTurns = screwLength / float(pitch)
     
@@ -229,20 +229,28 @@ def scadScrew(screwLength, shaftDiameter, pitch, threadHeightPerPitch = 0.75,
         sign = -1.
     else:
         sign = 1.
+        
+    upright = Vector(upright).normalize() 
+    
+    if tolerance != 0:
+        threadHeightPerPitch = (threadHeightPerPitch * pitch + 2. * tolerance) / pitch
+        toleranceInTurns = tolerance / float(pitch)
+    else:
+        toleranceInTurns = 0.
     
     def threadPath(t):
         angle = 2 * math.pi * t
         return Vector( 0.5 * shaftDiameter * math.cos(angle), 0.5 * sign * shaftDiameter * math.sin(angle), t * screwLength / nTurns ) + start
 
     screw = []
-    screw += sweep(threadPath, threadHeightPerPitch * pitch * threadBase, -0.5, nTurns+0.5, 1./resolution, 
+    screw += sweep(threadPath, threadHeightPerPitch * pitch * threadBase, -0.5-toleranceInTurns, nTurns+0.5+toleranceInTurns, 1./resolution, 
             upright=upright, keepSectionUpright=True, closed=False, cacheTriangulation=False, scad=True)
     
     # this could be just a cylinder in OpenSCAD, but it's fun to show how to do it using sweep
-    adjDiameter = 1.0000001 * shaftDiameter / math.cos(math.pi/resolution)
+    adjDiameter = 1.001 * (shaftDiameter + 2 * tolerance) / math.cos(math.pi/resolution)
     baseSection = adjDiameter/2 * Vector( cmath.exp(2j * math.pi * k / resolution) for k in range(resolution) )
 
-    shaftPath = lambda t : start + Vector(0, 0, t * screwLength)
+    shaftPath = lambda t : start - tolerance * upright + t * (screwLength + 2 * tolerance) * upright
     
     screw += sweep(shaftPath, baseSection, 0, 1, 1, upright=Vector(upright).perpendicular(), scad=True, 
             keepSectionUpright=True, closed=False, cacheTriangulation=True)
@@ -303,15 +311,14 @@ if __name__ == '__main__':
              
     screw = scadScrew(25, 10, 5, threadHeightPerPitch=0.75, resolution=40, moduleName="screw")
 
-    tolerance = 1
-    screw += scadScrew(12, 10+tolerance*2, 5, threadHeightPerPitch=(0.75*5.+tolerance*2)/5., resolution=40, moduleName="oversize_screw", clip=False)
+    screw += scadScrew(25, 10, 5, threadHeightPerPitch=0.75, resolution=40, moduleName="oversize_screw", tolerance=0.75, clip=False)
     screw += """
 
 module nut() {
     render(convexity=1)
     difference() {
         cylinder(d=30,h=10,$fn=6);
-        translate([0,0,-1]) oversize_screw();
+        translate([0,0,0]) oversize_screw();
     }
 }
     
