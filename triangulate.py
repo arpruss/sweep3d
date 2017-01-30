@@ -24,11 +24,9 @@ def triangulate(polygon):
     if n < 3:
         raise Exception
     
-    # two efficient special cases
+    # efficient special case
     if n == 3:
         return [(0,1,2)]
-    elif n == 4:
-        return [(0,1,2),(2,3,0)]
     
     triangles = []
     polygon = [Vector(v) for v in polygon]
