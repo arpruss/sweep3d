@@ -128,5 +128,5 @@ if __name__ == '__main__':
     t = time.time() - t
     sys.stderr.write("Time %.4fs\n" % t)
 #    sys.stderr.write(str(tr)+"\n")
-    print polygonsToSVG(polygon, tr)
+    print(polygonsToSVG(polygon, tr))
     
