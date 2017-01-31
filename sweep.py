@@ -412,7 +412,7 @@ translate([35,0,0]) nut();
 """
     
     sys.stderr.write("Saving screw.scad\n")
-    with open("screw.scad", "wb") as f: f.write(screw)
+    with open("screw.scad", "w") as f: f.write(screw)
     
     # Threaded circle
     baseRadius = 40
