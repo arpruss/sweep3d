@@ -143,10 +143,10 @@ class SectionAligner(object):
             out.append( m * Vector(v) + position )
 
         return out
-                
-def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1), 
+        
+def sweep(mainPath, section, t1, t2, steps=64, upright=Vector(0,0,1), derivative=None,
         solid=False, clockwise=False, scad=False, cacheTriangulation=False, closed=True, keepSectionUpright=False,
-        color=None, tangentPrecision=0.5):
+        color=None, differentiationPrecision=0.05, symmetricDifferentiation=False):
     """
     INPUTS:
     mainPath: function of t specifying the 3D path to sweep along -- output can be a vector or tuple
@@ -154,11 +154,15 @@ def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1),
         the number of points must be the same for all values of t, and close values of t should result in similar
         sections
     t1,t2: start and end of t parameter for mainPath
-    tstep: amount to increment t per step
+    steps: number of segments to include in sweep
     upright: upright vector or function of t returning an upright vector. The upright vector is what the y-axis of the
         section is aligned towards; if the tangent of the mainPath ever aligns with the upright vector,
         bad things will happen (numerical instability or code crash); ideally, you should point the upright vector away
-        from the approximate plane of the mainPath curve
+        from the approximate plane of the mainPath curve; if you set the upright to None, the binormal will be calculated
+        numerically and used.
+    derivative: constant vector or function returning a vector. If None, this is calculated numerically. The derivative of the 
+        curve is used as the normal for aligning the section. For special effects, you can set this to something other than
+        the actual derivative (but note that this is what will be used to calculate the binormal if upright is None).
     solid: if True, returns a list of (color,polyhedron) pairs, with polyhedra composed of triangular faces; the polyhedra
         then should be joined together with a CSG program like OpenSCAD;
         if False, returns a list of (color,triangle) pairs for a mesh
@@ -175,20 +179,65 @@ def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1),
     color: either an RGB color (tuple/list of floats from 0 to 1) or a function from t to RGB colors (allowing a sweep varying
         in color); you can also specify None for the color, which if consistently done will generate a monochrome OpenSCAD file
         or STL mesh
-    tangentPrecision: fraction of tstep used for calculating tangents
+    differentiationPrecision: will be scaled by tstep size
+    symmetricDifferentiation: *TODO* currently produces bad screw thread
     
     OUTPUT:
     list of (color,polyhedron) or (color,triangle) pairs
     """
     
-    if not hasattr(section, '__call__'):
-        section0 = section
-        section = lambda t : section0
-        cacheTriangulation = True
+    steps = int(steps)
+    tstep = (t2-t1)/float(steps)
     
-    if not hasattr(color, '__call__'):
-        color0 = color
-        color = lambda t : color0
+    def ensureFunction(f):
+        if hasattr(f, '__call__'):
+            return f
+        else: 
+            return lambda t,v=f: v
+                    
+    if not hasattr(section, '__call__'):
+        cachedTriangulation = True
+        section = ensureFunction(section)
+    color = ensureFunction(color)
+    
+    def differentiate(path, t, dt):
+        if symmetricDifferentiation:
+            if closed:
+                def wrap(u):
+                    return (u-t1) % (t2-t1) + t1
+                sample1 = wrap(t-0.5*dt)
+                sample2 = wrap(t+0.5*dt)
+            elif t - 0.5 * dt < t1:
+                sample1 = t1
+                sample2 = t1 + dt
+            elif t + 0.5 * dt > t2:
+                sample1 = t2 - dt
+                sample2 = t2
+            else:
+                sample1 = t - 0.5 * dt
+                sample2 = t + 0.5 * dt
+        else:
+            if closed:
+                def wrap(u):
+                    return (u-t1) % (t2-t1) + t1
+                sample1 = t
+                sample2 = wrap(t+dt)
+            elif t + dt > t2:
+                sample1 = t2 - dt
+                sample2 = t2
+            else:
+                sample1 = t
+                sample2 = t + dt
+        
+        return Vector(path(sample2))-Vector(path(sample1))
+    
+    if derivative is None: 
+        derivative = lambda t : differentiate(mainPath, t, 0.5*differentiationPrecision*tstep)
+    else:
+        derivative = ensureFunction(derivative)
+        
+    if upright is None:
+        upright = lambda t: derivative(t).cross(differentiate(derivative,t,differentiationPrecision*tstep))
     
     if scad:
         solid = True
@@ -200,11 +249,7 @@ def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1),
     
     def getCrossSection(s, t):
         f1 = Vector(mainPath(t))
-        if closed or t+tstep*tangentPrecision <= t2:
-            direction = Vector(mainPath( (t-t1+tstep*tangentPrecision)%(t2-t1) + t1 )) - f1
-        else:
-            direction = f1 - Vector(mainPath( t-tstep*tangentPrecision ))
-        return aligner.align(s, direction, f1, t)
+        return aligner.align(s, derivative(t), f1, t)
         
     if (solid or not closed) and cacheTriangulation:
         cachedTriangulation = triangulate(section(t1))
@@ -221,15 +266,22 @@ def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1),
         
     output = []
     nextCrossSection = None
-    t = t1
-    while t < t2:
+    
+    for step in range(steps):
+        t = t1 + step*(t2-t1)/float(steps)
+
         curColor = color(t)
         if nextCrossSection is not None:
             curCrossSection,curTriangulation = nextCrossSection,nextTriangulation
         else:
             s1 = section(t)
             curCrossSection,curTriangulation = getCrossSection(s1, t), not solid or getTriangulation(s1)
-        nextT = t+tstep if t+tstep < t2 else (t1 if closed else t2)
+
+        if closed:
+            nextT = (step+1)%steps * (t2-t1) / float(steps) + t1
+        else:
+            nextT = (step+1) * (t2-t1) / float(steps)
+
         s2 = section(nextT)
         nextCrossSection,nextTriangulation = getCrossSection( s2, nextT ), not solid or getTriangulation(s2)
         
@@ -263,8 +315,6 @@ def sweep(mainPath, section, t1, t2, tstep, upright=Vector(0,0,1),
         else:
             for i in range(n):
                 output += colorize(triangulateTube(i))
-                
-        t += tstep
             
     if not solid and not closed:
         s = section(t2)
@@ -323,7 +373,7 @@ def scadScrew(screwLength, shaftDiameter, pitch, threadHeightPerPitch = 0.75,
         return Vector( 0.5 * shaftDiameter * math.cos(angle), 0.5 * sign * shaftDiameter * math.sin(angle), t * screwLength / nTurns ) + start
 
     screw = []
-    screw += sweep(threadPath, threadHeightPerPitch * pitch * threadBase, -0.5-toleranceInTurns, nTurns+0.5+toleranceInTurns, 1./resolution, 
+    screw += sweep(threadPath, threadHeightPerPitch * pitch * threadBase, -0.5-toleranceInTurns, nTurns+0.5+toleranceInTurns, steps=int(resolution*nTurns), 
             upright=upright, keepSectionUpright=True, closed=False, cacheTriangulation=False, scad=True)
     
     # this could be just a cylinder in OpenSCAD, but it's fun to show how to do it using sweep
@@ -333,7 +383,7 @@ def scadScrew(screwLength, shaftDiameter, pitch, threadHeightPerPitch = 0.75,
 
     shaftPath = lambda t : start - tolerance * upright + t * (screwLength + 2 * tolerance) * upright
     
-    screw += sweep(shaftPath, baseSection, 0, 1, 1, upright=Vector(upright).perpendicular(), scad=True, 
+    screw += sweep(shaftPath, baseSection, 0, 1, steps=1, upright=Vector(upright).perpendicular(), scad=True, 
             keepSectionUpright=True, closed=False, cacheTriangulation=True)
             
     screwSCAD = toSCADModule(screw, moduleName+("_unclipped" if clip else ""))
@@ -371,16 +421,16 @@ if __name__ == '__main__':
     
     # Borromean rings
     rings = []
-    rings += sweep(path1, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=True, cacheTriangulation=True, color=(1.,0.,0.))
-    rings += sweep(path2, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=True, cacheTriangulation=True, color=(0.,1.,0.))
-    rings += sweep(path3, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=True, cacheTriangulation=True, color=(0.,0.,1.))
+    rings += sweep(path1, section, 0, 2*math.pi, upright=Vector(0,.1,1), scad=True, cacheTriangulation=True, color=(1.,0.,0.))
+    rings += sweep(path2, section, 0, 2*math.pi, upright=Vector(0,.1,1), scad=True, cacheTriangulation=True, color=(0.,1.,0.))
+    rings += sweep(path3, section, 0, 2*math.pi, upright=Vector(0,.1,1), scad=True, cacheTriangulation=True, color=(0.,0.,1.))
 
     saveSCAD("borromean.scad", rings)
 
     rings = []
-    rings += sweep(path1, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=False, color=(1.,0.,0.))
-    rings += sweep(path2, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=False, color=(0.,1.,0.))
-    rings += sweep(path3, section, 0, 2*math.pi, .1, upright=Vector(0,.1,1), scad=False, color=(0.,0.,1.))
+    rings += sweep(path1, section, 0, 2*math.pi, upright=Vector(0,.1,1), scad=False, color=(1.,0.,0.))
+    rings += sweep(path2, section, 0, 2*math.pi, upright=Vector(0,.1,1), scad=False, color=(0.,1.,0.))
+    rings += sweep(path3, section, 0, 2*math.pi, upright=Vector(0,.1,1), scad=False, color=(0.,0.,1.))
 
     saveSTL("borromean.stl", rings)
 
@@ -389,8 +439,10 @@ if __name__ == '__main__':
     
     cinqueFoilPath = lambda t: scale/2.*Vector(math.cos(2*t) * (3 + math.cos(5*t)), math.sin(2*t) * (3 + math.cos(5*t)), math.sin(5*t))
     color = lambda t: (1.,0.5*(math.cos(t)+1),0.)
-    saveSTL("cinquefoil.stl", sweep(cinqueFoilPath, section, 0, 2*math.pi, .05, color=color))
-    saveSCAD("cinquefoil.scad", sweep(cinqueFoilPath, section, 0, 2*math.pi, .05, scad=True, cacheTriangulation=True, color=color))
+    saveSTL("cinquefoil.stl", sweep(cinqueFoilPath, section, 0, 2*math.pi, steps=128, color=color))
+    saveSCAD("cinquefoil.scad", sweep(cinqueFoilPath, section(0), 0, 2*math.pi, steps=128, scad=True, cacheTriangulation=True, color=color))
+    
+    
        
     # Screw and nut (OpenSCAD only)
     screw = scadScrew(25, 10, 5, threadHeightPerPitch=0.75, resolution=40, moduleName="screw")
@@ -432,11 +484,10 @@ translate([35,0,0]) nut();
     
     color = lambda t:(0.5+0.5*math.cos(t),0.25,0.5+0.5*math.sin(t))
     
-    threadedCircle = sweep(circularSpiral, threadSection, 0, 2*math.pi, 2*math.pi/64/nThreads, scad=True, cacheTriangulation=True, closed=True,
+    threadedCircle = sweep(circularSpiral, threadSection, 0, 2*math.pi, steps=64*nThreads, scad=True, cacheTriangulation=True, closed=True,
                         upright=upright, keepSectionUpright=False, color=color)
                         
-    threadedCircle += sweep(lambda t:(baseRadius*math.cos(t), baseRadius*math.sin(t), 0), regularPolygon(r=secondaryRadius*1.05), 0, 2*math.pi, .1, 
+    threadedCircle += sweep(lambda t:(baseRadius*math.cos(t), baseRadius*math.sin(t), 0), regularPolygon(r=secondaryRadius*1.05), 0, 2*math.pi, 
                         scad=True, cacheTriangulation=True, closed=True, color=color)
     
     saveSCAD("threadedcircle.scad", threadedCircle)
-    
