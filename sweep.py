@@ -9,7 +9,7 @@ from triangulate import *
 def toSCADModule(polys, moduleName):
     """
     INPUT:
-    polys: list of (color,polyhedra) pairs (clockwise triangles)
+    polys: list of (color,polyhedra) pairs (counterclockwise triangles)
     moduleName: OpenSCAD module name
     
     OUTPUT: string with OpenSCAD code implementing the polys
@@ -26,14 +26,14 @@ def toSCADModule(polys, moduleName):
         line += "polyhedron(points=["
         points = []
         for face in poly:
-            for v in face:
+            for v in reversed(face):
                 if tuple(v) not in pointsDict:
                     pointsDict[tuple(v)] = i
                     points.append( "[%.9f,%.9f,%.9f]" % tuple(v) )
                     i += 1
         line += ",".join(points)
         line += "], faces=["
-        line += ",".join( "[" + ",".join(str(pointsDict[tuple(v)]) for v in face) + "]" for face in poly ) + "]"
+        line += ",".join( "[" + ",".join(str(pointsDict[tuple(v)]) for v in reversed(face)) + "]" for face in poly ) + "]"
         line += ");"
         scad.append(line)
     scad.append("}")
@@ -42,7 +42,7 @@ def toSCADModule(polys, moduleName):
 def saveSCAD(filename, polys, moduleName="object1", quiet=False):
     """
     filename: filename to write OpenSCAD file
-    polys: list of (color,polyhedra) pairs (clockwise triangles)
+    polys: list of (color,polyhedra) pairs (counterclockwise triangles)
     moduleName: OpenSCAD module name
     quiet: give no status message if set
     """
@@ -145,7 +145,7 @@ class SectionAligner(object):
         return out
         
 def sweep(mainPath, section, t1, t2, steps=64, upright=Vector(0,0,1), derivative=None,
-        solid=False, clockwise=False, scad=False, cacheTriangulation=False, closed=True, keepSectionUpright=False,
+        solid=False, scad=False, cacheTriangulation=False, closed=True, keepSectionUpright=False,
         color=None, differentiationPrecision=0.05, symmetricDifferentiation=False):
     """
     INPUTS:
@@ -166,8 +166,7 @@ def sweep(mainPath, section, t1, t2, steps=64, upright=Vector(0,0,1), derivative
     solid: if True, returns a list of (color,polyhedron) pairs, with polyhedra composed of triangular faces; the polyhedra
         then should be joined together with a CSG program like OpenSCAD;
         if False, returns a list of (color,triangle) pairs for a mesh
-    clockwise: if True, the order in a triangular face is clockwise when viewed from outside a solid
-    scad: if True, sets solid=True and clockwise=True for OpenSCAD output
+    scad: if True, sets solid=True for OpenSCAD output; for backwards compatibility
     cacheTriangulation: if True, it's assumed that all values of the section function can be triangulated in the same way; 
         the easiest way to guarantee this is to ensure that the different values of the section function are affine transforms
         of each other
@@ -241,7 +240,6 @@ def sweep(mainPath, section, t1, t2, steps=64, upright=Vector(0,0,1), derivative
     
     if scad:
         solid = True
-        clockwise = True
         
     cachedTriangulation = None
 
@@ -288,27 +286,23 @@ def sweep(mainPath, section, t1, t2, steps=64, upright=Vector(0,0,1), derivative
         n = len(curCrossSection)
         assert n == len(nextCrossSection)
         
-        def applyTriangulation(points,tr,clockwise=False):
-            if clockwise:
+        def applyTriangulation(points,tr,reversed=False):
+            if reversed:
                 return [ (points[t[2]],points[t[1]],points[t[0]]) for t in tr ]
             else:
                 return [ (points[t[0]],points[t[1]],points[t[2]]) for t in tr ]
 
         if not closed and not solid and t == t1:
             curTriangulation = getTriangulation(s1)
-            output += colorize(applyTriangulation(curCrossSection, curTriangulation, clockwise=clockwise))
+            output += colorize(applyTriangulation(curCrossSection, curTriangulation))
         
         def triangulateTube(i):
-            if clockwise:
-                return [ ( nextCrossSection[(i+1)%n], nextCrossSection[i], curCrossSection[i] ), 
-                         ( curCrossSection[i], curCrossSection[(i+1)%n], nextCrossSection[(i+1)%n] ) ]
-            else:
-                return [ ( curCrossSection[i], nextCrossSection[i], nextCrossSection[(i+1)%n] ), 
-                         ( nextCrossSection[(i+1)%n], curCrossSection[(i+1)%n], curCrossSection[i] ) ]
+            return [ ( curCrossSection[i], nextCrossSection[i], nextCrossSection[(i+1)%n] ), 
+                     ( nextCrossSection[(i+1)%n], curCrossSection[(i+1)%n], curCrossSection[i] ) ]
                      
         if solid:
-            polyhedron = applyTriangulation(curCrossSection, curTriangulation, clockwise=clockwise)
-            polyhedron += applyTriangulation(nextCrossSection, nextTriangulation, clockwise=not clockwise)
+            polyhedron = applyTriangulation(curCrossSection, curTriangulation)
+            polyhedron += applyTriangulation(nextCrossSection, nextTriangulation, reversed=True)
             for i in range(len(curCrossSection)):
                 polyhedron += triangulateTube(i)
             output.append((curColor,polyhedron))
@@ -319,7 +313,7 @@ def sweep(mainPath, section, t1, t2, steps=64, upright=Vector(0,0,1), derivative
     if not solid and not closed:
         s = section(t2)
         curColor = color(t2)
-        output += colorize(applyTriangulation(getCrossSection(s, t2), getTriangulation(s), clockwise=not clockwise))
+        output += colorize(applyTriangulation(getCrossSection(s, t2), getTriangulation(s)), reversed=True)
         
     return output
     
@@ -346,6 +340,8 @@ def scadScrew(screwLength, shaftDiameter, pitch, threadHeightPerPitch = 0.75,
     clip: if True, the thread doesn't stick out past the end of the shaft; of course, if making a real screw you generally want
         that; but if you are just generating a screw shape for subtraction from a solid for female through-thread, then things 
         will work faster without clipping
+        
+        TODO: clip right now only works for upright screws starting at (0,0,0) 
         
     OUTPUT:
     OpenSCAD module to generate the screw; if clipping is True, there will also be a moduleName_unclipped module generated
@@ -392,13 +388,12 @@ def scadScrew(screwLength, shaftDiameter, pitch, threadHeightPerPitch = 0.75,
         screwSCAD += """
 
 module %s() {
-  render(convexity=1) difference() {
+  render(convexity=1) intersection() {
     %s_unclipped();
-    translate([0,0,%.6f]) linear_extrude(height=%.6f) square(%.6f,center=true);
-    translate([0,0,%.6f]) linear_extrude(height=%.6f) square(%.6f,center=true);
+    linear_extrude(height=%.6f) square(%.6f,center=true);
   }
 }
-""" % (moduleName, moduleName, -pitch,pitch,shaftDiameter+pitch*10, screwLength,pitch,shaftDiameter+pitch*10)
+""" % (moduleName, moduleName, screwLength,shaftDiameter+pitch*10)
 
     return screwSCAD
     
