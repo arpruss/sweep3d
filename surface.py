@@ -74,7 +74,10 @@ def surfaceToMesh(data, center=False, twoSided=False, zClip=None, xScale=1., ySc
                     mesh += triangles((1,0), (1,1), (0,1))
 
     return mesh
-    
+
+#    
+# inflation algorithm from Alexander Repenning, "Inflatable Icons: Diffusion-based Interactive Extrusion of 2D Images into 3D Models"    
+#
 def inflateImage(image, pressure=0.05, diffusion=0.25, iterations=None):
     def inside(x,y):
         if x < 0 or x >= image.size[0] or y < 0 or y >= image.size[1]:
@@ -114,18 +117,21 @@ if __name__ == '__main__':
     
     image = Image.open('smallheart.png').convert('RGBA')
     
-    data = inflateImage(image,iterations=1000)
+    print("Inflating...")
+    data = inflateImage(image,pressure=0.1,iterations=1000)
     
-    print max(max(z) for z in data)
+    print("Height="+str(max(max(z) for z in data)))
     scadModule = toSCADModule(surfaceToMesh(data, twoSided=False), "smallHeart")
     scadModule += """
 
     render(convexity=2)
+    translate([0,0,-0.5])
     intersection() {
         smallHeart();
         translate([0,0,.5]) cube([200,200,200]);
     }
 """
     
+    print("Saving smallheart.scad")
     with open("smallheart.scad", "w") as f: f.write(scadModule)
     
