@@ -1,8 +1,10 @@
 from vector import *
 from exportmesh import *
+from PIL import Image
 import itertools
 
-def surfaceToMesh(data, center=False, twoSided=False, xScale=1., yScale=1., zScale=1., tolerance=1e-6, color=None):
+def surfaceToMesh(data, center=False, twoSided=False, zClip=None, xScale=1., yScale=1., zScale=1., tolerance=1e-6, color=None):
+    # clipping is done before z-scaling
     width = len(data)
     height = len(data[0])
     xMin = width - 1
@@ -21,8 +23,10 @@ def surfaceToMesh(data, center=False, twoSided=False, xScale=1., yScale=1., zSca
         else:
             if data[x][y] <= tolerance:
                 return 0.
-            else:
+            elif zClip is None:
                 return data[x][y]
+            else:
+                return min(data[x][y],zClip)
 
     for x in range(width):
         for y in range(height):
@@ -71,6 +75,57 @@ def surfaceToMesh(data, center=False, twoSided=False, xScale=1., yScale=1., zSca
 
     return mesh
     
+def inflateImage(image, pressure=0.05, diffusion=0.25, iterations=None):
+    def inside(x,y):
+        if x < 0 or x >= image.size[0] or y < 0 or y >= image.size[1]:
+            return false
+        rgb = image.getpixel((x,image.size[1]-1-y))
+        if len(rgb) > 3 and rgb[3] == 0:
+            return False
+        return rgb[0:3] != (255,255,255)
+        
+    width = image.size[0]
+    height = image.size[1]
+    
+    if iterations == None:
+        iterations = 10 * max(width,height)
+        
+    data = [ [0. for y in range(height)] for x in range(width) ]
+    
+    for iter in range(iterations):
+        newData = [ [0. for y in range(height)] for x in range(width) ]
+        for x in range(width):
+            for y in range(height):
+                def z(dx,dy):
+                    if x+dx < 0 or x+dx >= width or y+dy < 0 or y+dy >= height:
+                        return 0.
+                    else:
+                        return data[x+dx][y+dy]
+                        
+                if inside(x,y):
+                    newData[x][y] = diffusion * (z(-1,0)+z(1,0)+z(0,1)+z(0,-1)-4*z(0,0)+pressure) + z(0,0)
+        data = newData
+                    
+    return data
+        
 if __name__ == '__main__':
     data = [ [0.1,0.2], [0.3,0.4] ]
-    saveSTL("surface.stl", surfaceToMesh(data, twoSided=True))
+    saveSTL("quad.stl", surfaceToMesh(data, twoSided=True))
+    
+    image = Image.open('smallheart.png').convert('RGBA')
+    
+    data = inflateImage(image,iterations=1000)
+    
+    print max(max(z) for z in data)
+    scadModule = toSCADModule(surfaceToMesh(data, twoSided=False), "smallHeart")
+    scadModule += """
+
+    render(convexity=2)
+    intersection() {
+        smallHeart();
+        translate([0,0,.5]) cube([200,200,200]);
+    }
+"""
+    
+    with open("smallheart.scad", "w") as f: f.write(scadModule)
+    
