@@ -41,6 +41,8 @@ def surfaceToMesh(data, center=False, twoSided=False, xScale=1., yScale=1., zSca
         
     mesh = []
     
+    # this code could be made way more efficient
+    
     for x in range(xMin - 1, xMax + 1):
         for y in range(yMin - 1, yMax + 1):
             v = Vector(x,y)
