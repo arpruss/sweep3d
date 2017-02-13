@@ -1,15 +1,38 @@
 from struct import pack
 from vector import *
+from numbers import Number 
 import sys
+
+def isColorTriangleList(polys):
+    return isinstance(polys[0][1][0][0], Number)
+    
+def toPolyhedra(polys):
+    if isColorTriangleList(polys):
+        return [ (polys[0][0], list(face for rgb,face in polys)) ]
+    else:
+        return polys
+        
+def toMesh(polys):
+    if isColorTriangleList(polys):
+        return polys
+    else:
+        output = []
+        for rgb,polyhedron in polys:
+            for face in polyhedron:
+                output.append((rgb,face))
+        return output
 
 def toSCADModule(polys, moduleName):
     """
     INPUT:
-    polys: list of (color,polyhedra) pairs (counterclockwise triangles)
+    polys: list of (color,polyhedra) pairs (counterclockwise triangles), or a list of (color,triangle) pairs (TODO: currently uses first color for all in latter case)
     moduleName: OpenSCAD module name
     
     OUTPUT: string with OpenSCAD code implementing the polys
     """
+    
+    polys = toPolyhedra(polys)
+    
     scad = []
     scad.append("module " +moduleName+ "() {")
     for rgb,poly in polys:
@@ -54,6 +77,9 @@ def saveSTL(filename, mesh, swapYZ=False, quiet=False):
     swapYZ: should Y/Z axes be swapped?
     quiet: give no status message if set
     """
+    
+    mesh = toMesh(mesh)
+    
     if not quiet: sys.stderr.write("Saving %s\n" % filename)
     minY = float("inf")
     minVector = Vector(float("inf"),float("inf"),float("inf"))
