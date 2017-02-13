@@ -75,7 +75,7 @@ def surfaceToMesh(data, center=False, twoSided=False, zClip=None, xScale=1., ySc
 
     return mesh
 
-def inflateImage(image, pressure=0.05, diffusion=0.25, iterations=None):
+def inflateImage(image, pressure=0.03, iterations=None):
     def inside(x,y):
         if x < 0 or x >= image.size[0] or y < 0 or y >= image.size[1]:
             return false
@@ -103,7 +103,7 @@ def inflateImage(image, pressure=0.05, diffusion=0.25, iterations=None):
                         return data[x+dx][y+dy]
                         
                 if inside(x,y):
-                    newData[x][y] = diffusion * ( (z(-1,0)+z(1,0)+z(0,1)+z(0,-1)+0.7*(z(-1,-1)+z(1,1)+z(-1,1)+z(1,-1)))/1.7-4*z(0,0)+pressure) + z(0,0)
+                    newData[x][y] = (z(-1,0)+z(1,0)+z(0,-1)+z(0,1)+0.7*(z(-1,-1)+z(1,1)+z(-1,1)+z(1,-1)))/(4+0.7*4)+pressure
         data = newData
                     
     return data
@@ -115,7 +115,7 @@ if __name__ == '__main__':
     image = Image.open('smallheart.png').convert('RGBA')
     
     print("Inflating...")
-    data = inflateImage(image,pressure=0.1,iterations=1000)
+    data = inflateImage(image,pressure=0.03,iterations=10000)
     
     print("Height="+str(max(max(z) for z in data)))
     scadModule = toSCADModule(surfaceToMesh(data, twoSided=False), "smallHeart")
