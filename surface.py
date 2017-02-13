@@ -77,7 +77,24 @@ def surfaceToMesh(data, center=False, twoSided=False, zClip=None, xScale=1., ySc
 
 def inflateImage(image, thickness=10., roundness=1., iterations=None):
     """
-    roundness varies from 0.0 for maximally steep sides to 1.0 for a very smooth profile 
+    roundness varies from 0.0 for maximally steep sides to 1.0 for a very gradual profile.
+    
+    Here's a way to visualize how inflateImage() works. The white or transparent areas 
+    of the image are cold, clamped at temperature 0. Above the image, there is a layer of
+    insulation, and above that there is a flat heater at a fixed positive temperature. So, 
+    the clamped areas stay at the fixed temperature, but away from the clamped areas, the image
+    heats up. How the heat profile looks depends on how effective the layer of insulation is.
+    The effectiveness of the layer of insulation is measured by the roundness parameter.
+    When this parameter is close to zero, the unclamped areas all get to close to the heater
+    temperature, resulting in a very sharp heat gradient near the image boundaries, and flatness
+    further away from the boundaries. When the parameter is close to 1, the insulation is more
+    effective, and the temperature rise away from the boundaries is more gradual. The result is
+    a smoother change in the gradient.
+    
+    Finally, the temperatures are scaled to be between 0 and thickness to generate the inflated
+    height map. 
+    
+    If roundness > 1., things blow up due to uncontrolled heating.
     """
     def inside(x,y):
         if x < 0 or x >= image.size[0] or y < 0 or y >= image.size[1]:
@@ -107,6 +124,7 @@ def inflateImage(image, thickness=10., roundness=1., iterations=None):
                         
                 if inside(x,y):
                     newData[x][y] = 1.0+roundness*(z(-1,0)+z(1,0)+z(0,-1)+z(0,1)+0.7*(z(-1,-1)+z(1,1)+z(-1,1)+z(1,-1)))/(4+0.7*4)
+
         data = newData
         
     maxZ = max(max(col) for col in data)
@@ -120,7 +138,7 @@ if __name__ == '__main__':
     image = Image.open('smallheart.png').convert('RGBA')
     
     print("Inflating...")
-    data = inflateImage(image,thickness=10,roundness=0.98,iterations=3000)
+    data = inflateImage(image,thickness=10,roundness=1.,iterations=3000)
     
     scadModule = toSCADModule(surfaceToMesh(data, twoSided=False), "smallHeart")
     scadModule += """
@@ -136,3 +154,22 @@ if __name__ == '__main__':
     print("Saving smallheart.scad")
     with open("smallheart.scad", "w") as f: f.write(scadModule)
     
+    image = Image.open('smallheart2.png').convert('RGBA')
+    
+    print("Inflating...")
+    data = inflateImage(image,thickness=10,roundness=1.,iterations=3000)
+    
+    scadModule = toSCADModule(surfaceToMesh(data, twoSided=False, xScale=2., yScale=2.), "smallHeart2")
+    scadModule += """
+
+    render(convexity=2)
+    translate([0,0,-0.5])
+    intersection() {
+        smallHeart2();
+        translate([0,0,.5]) cube([200,200,200]);
+    }
+"""
+    
+    print("Saving smallheart2.scad")
+    with open("smallheart2.scad", "w") as f: f.write(scadModule)
+        
