@@ -75,7 +75,10 @@ def surfaceToMesh(data, center=False, twoSided=False, zClip=None, xScale=1., ySc
 
     return mesh
 
-def inflateImage(image, pressure=0.03, iterations=None):
+def inflateImage(image, thickness=10., roundness=1., iterations=None):
+    """
+    roundness varies from 0.0 for maximally steep sides to 1.0 for a very smooth profile 
+    """
     def inside(x,y):
         if x < 0 or x >= image.size[0] or y < 0 or y >= image.size[1]:
             return false
@@ -88,7 +91,7 @@ def inflateImage(image, pressure=0.03, iterations=None):
     height = image.size[1]
     
     if iterations == None:
-        iterations = 10 * max(width,height)
+        iterations = 60 * max(width,height)
         
     data = [ [0. for y in range(height)] for x in range(width) ]
     
@@ -103,10 +106,12 @@ def inflateImage(image, pressure=0.03, iterations=None):
                         return data[x+dx][y+dy]
                         
                 if inside(x,y):
-                    newData[x][y] = (z(-1,0)+z(1,0)+z(0,-1)+z(0,1)+0.7*(z(-1,-1)+z(1,1)+z(-1,1)+z(1,-1)))/(4+0.7*4)+pressure
+                    newData[x][y] = 1.0+roundness*(z(-1,0)+z(1,0)+z(0,-1)+z(0,1)+0.7*(z(-1,-1)+z(1,1)+z(-1,1)+z(1,-1)))/(4+0.7*4)
         data = newData
-                    
-    return data
+        
+    maxZ = max(max(col) for col in data)
+    
+    return [ [datum / maxZ * thickness for datum in col] for col in data ]
         
 if __name__ == '__main__':
     data = [ [0.1,0.2], [0.3,0.4] ]
@@ -115,9 +120,8 @@ if __name__ == '__main__':
     image = Image.open('smallheart.png').convert('RGBA')
     
     print("Inflating...")
-    data = inflateImage(image,pressure=0.03,iterations=10000)
+    data = inflateImage(image,thickness=10,roundness=0.98,iterations=3000)
     
-    print("Height="+str(max(max(z) for z in data)))
     scadModule = toSCADModule(surfaceToMesh(data, twoSided=False), "smallHeart")
     scadModule += """
 
