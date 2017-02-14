@@ -99,6 +99,9 @@ class Vector(tuple):
                 return Vector(-self.y,self.x,0.).normalize()
         else:
             raise NotImplementedError
+            
+    def toComplex(self):
+        return complex(self[0], self[1])
         
     @property
     def x(self):

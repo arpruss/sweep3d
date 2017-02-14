@@ -2,8 +2,9 @@ from vector import *
 from exportmesh import *
 from PIL import Image
 import itertools
+import os.path
 
-def surfaceToMesh(data, center=False, twoSided=False, zClip=None, xScale=1., yScale=1., zScale=1., tolerance=1e-6, color=None):
+def surfaceToMesh(data, center=False, twoSided=False, zClip=None, xScale=1., yScale=1., zScale=1., tolerance=0., color=None):
     # clipping is done before z-scaling
     width = len(data)
     height = len(data[0])
@@ -40,8 +41,8 @@ def surfaceToMesh(data, center=False, twoSided=False, zClip=None, xScale=1., ySc
         offsetX = -0.5 * (xMin + xMax)
         offsetY = -0.5 * (yMin + yMax)
     else:
-        offsetX = - ( xMin - 1. )
-        offsetY = - ( yMin - 1. )
+        offsetX = 0
+        offsetY = 0
         
     mesh = []
     
@@ -75,8 +76,10 @@ def surfaceToMesh(data, center=False, twoSided=False, zClip=None, xScale=1., ySc
 
     return mesh
 
-def inflateImage(image, thickness=10., roundness=1., iterations=None):
+def inflateRaster(raster, thickness=10., roundness=1., iterations=None):
     """
+    raster is a boolean matrix.
+    
     roundness varies from 0.0 for maximally steep sides to 1.0 for a very gradual profile.
     
     Here's a way to visualize how inflateImage() works. The white or transparent areas 
@@ -96,17 +99,9 @@ def inflateImage(image, thickness=10., roundness=1., iterations=None):
     
     If roundness > 1., things blow up due to uncontrolled heating.
     """
-    def inside(x,y):
-        if x < 0 or x >= image.size[0] or y < 0 or y >= image.size[1]:
-            return false
-        rgb = image.getpixel((x,image.size[1]-1-y))
-        if len(rgb) > 3 and rgb[3] == 0:
-            return False
-        return rgb[0:3] != (255,255,255)
+    width = len(raster)
+    height = len(raster[0])
         
-    width = image.size[0]
-    height = image.size[1]
-    
     if iterations == None:
         iterations = 60 * max(width,height)
         
@@ -117,12 +112,14 @@ def inflateImage(image, thickness=10., roundness=1., iterations=None):
         for x in range(width):
             for y in range(height):
                 def z(dx,dy):
-                    if x+dx < 0 or x+dx >= width or y+dy < 0 or y+dy >= height:
+                    x1 = x+dx
+                    y1 = y+dy
+                    if x1 < 0 or x1 >= width or y1 < 0 or y1 >= height:
                         return 0.
                     else:
-                        return data[x+dx][y+dy]
+                        return data[x1][y1]
                         
-                if inside(x,y):
+                if raster[x][y]:
                     newData[x][y] = 1.0+roundness*(z(-1,0)+z(1,0)+z(0,-1)+z(0,1)+0.7*(z(-1,-1)+z(1,1)+z(-1,1)+z(1,-1)))/(4+0.7*4)
 
         data = newData
@@ -130,46 +127,50 @@ def inflateImage(image, thickness=10., roundness=1., iterations=None):
     maxZ = max(max(col) for col in data)
     
     return [ [datum / maxZ * thickness for datum in col] for col in data ]
+
+
+def inflateImage(image, thickness=10., roundness=1., iterations=None):
+    def inside(x,y):
+        rgb = image.getpixel((x,image.size[1]-1-y))
+        if len(rgb) > 3 and rgb[3] == 0:
+            return False
+        return rgb[0:3] != (255,255,255)
+
+    raster = [ [ inside(x,y) for y in range(image.size[1]) ] for x in range(image.size[0]) ]
+    
+    return inflateRaster(image, thickness=thickness, roundness=roundness, iterations=itierations)
         
 if __name__ == '__main__':
-    data = [ [0.1,0.2], [0.3,0.4] ]
-    saveSTL("quad.stl", surfaceToMesh(data, twoSided=True))
+    inPath = sys.argv[1]
+    outPath = os.path.splitext(inPath)[0] + ".scad"
+    baseName = os.path.splitext(os.path.basename(outPath))[0]
     
-    image = Image.open('smallheart.png').convert('RGBA')
+    thickness = 10.
+    roundness = 1.
+    if len(sys.argv)>2:
+        thickness = float(sys.argv[2])
+    if len(sys.argv)>3:
+        roundness = float(sys.argv[3])
+
+    image = Image.open(inPath).convert('RGBA')
     
     print("Inflating...")
-    data = inflateImage(image,thickness=10,roundness=1.,iterations=3000)
+    data = inflateImage(image,thickness=thickness,roundness=roundness)
     
-    scadModule = toSCADModule(surfaceToMesh(data, twoSided=False), "smallHeart")
+    scadModule = toSCADModule(surfaceToMesh(data, twoSided=False, center=True), baseName+"_raw")
     scadModule += """
 
-    render(convexity=2)
-    translate([0,0,-0.5])
-    intersection() {
-        smallHeart();
-        translate([0,0,.5]) cube([200,200,200]);
-    }
-"""
-    
-    print("Saving smallheart.scad")
-    with open("smallheart.scad", "w") as f: f.write(scadModule)
-    
-    image = Image.open('smallheart2.png').convert('RGBA')
-    
-    print("Inflating...")
-    data = inflateImage(image,thickness=10,roundness=1.,iterations=3000)
-    
-    scadModule = toSCADModule(surfaceToMesh(data, twoSided=False, xScale=2., yScale=2.), "smallHeart2")
-    scadModule += """
+module %s() {
+     render(convexity=2)
+     translate([0,0,-%f])
+     intersection() {
+        %s_raw();
+        translate([-%d/2,-%d/2,%f]) cube([%d,%d,%f]);
+     }
+}
 
-    render(convexity=2)
-    translate([0,0,-0.5])
-    intersection() {
-        smallHeart2();
-        translate([0,0,.5]) cube([200,200,200]);
-    }
-"""
+%s();
+""" % (baseName, thickness / 20., baseName, image.size[0], image.size[1], thickness / 20., image.size[0]+2, image.size[1]+2, thickness+1., baseName)
     
-    print("Saving smallheart2.scad")
-    with open("smallheart2.scad", "w") as f: f.write(scadModule)
-        
+    print("Saving "+outPath)
+    with open(outPath, "w") as f: f.write(scadModule)
