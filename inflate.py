@@ -72,10 +72,8 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
                     update(x)
             if state.changed:
                 z = z0 + state.bestLength * normDelta
-                #z = z0 + 0.5 * length * normDelta
                 return (z.real, z.imag, 0.)
             else:
-                print "notrim", start, stop, delta, rotate, state.bestLength
                 return stop
     
         zeroCount = sum(1 for v in face if v.z == 0.)
