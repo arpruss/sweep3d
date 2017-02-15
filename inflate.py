@@ -122,4 +122,5 @@ if __name__ == '__main__':
     import math
     import cmath
     shape = [ [30*cmath.exp(2*math.pi*1j*k/50),30*cmath.exp(2*math.pi*1j*(k+1)/50)] for k in range(50) ]
-    saveSCAD("circle.scad", inflatePolygon(shape,twoSided=False,roundness=0.95))
+    saveSCAD("circle.scad", inflatePolygon(shape,twoSided=False,roundness=0.99,spacing=2))
+    
