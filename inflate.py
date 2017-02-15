@@ -124,21 +124,32 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
             mesh.append((rgb, face2))
     return mesh
     
-def inflateSVGFile(svgFile, spacing=1., thickness=10., roundness=1., iterations=None, twoSided=False, width=0.5, trim=True):
+def sortedApproximatePaths(paths,error=0.1):
+    paths = [path.linearApproximation(error=error) for path in paths]
+    def key(path):
+        top = min(min(line.start.imag,line.end.imag) for line in path)
+        left = min(min(line.start.real,line.end.real) for line in path)
+        return (top,left)
+    return sorted(paths, key=key)
+
+def inflateLinearPath(path, spacing=1., thickness=10., roundness=1., iterations=None, ignoreColor=False):
+    lines = []
+    for line in path:
+        lines.append((line.start,line.end))
+    mode = shader.Shader.MODE_NONZERO if path.svgState.fillRule == 'nonzero' else shader.Shader.MODE_EVEN_ODD
+    return inflatePolygon(lines, spacing=spacing, thickness=thickness, roundness=roundness, 
+                iterations=iterations, twoSided=twoSided, color=None if ignoreColor else path.svgState.fill, shadeMode=mode, trim=trim) 
+    
+def inflateSVGFile(svgFile, spacing=1., thickness=10., roundness=1., iterations=None, twoSided=False, trim=True, ignoreColor=False):
     meshes = []
 
-    paths = parser.getPathsFromSVGFile(svgFile)[0]
+    paths = sortedApproximatePaths( parser.getPathsFromSVGFile(svgFile)[0], error=spacing*0.1 )
     
     i = 0
     for path in paths:
         if path.svgState.fill is not None:
-            lines = []
-            for line in path.linearApproximation(error=spacing*.1):
-                lines.append((line.start,line.end))
-            mode = shader.Shader.MODE_NONZERO if path.svgState.fillRule == 'nonzero' else shader.Shader.MODE_EVEN_ODD
-            mesh = inflatePolygon(lines, spacing=spacing, thickness=thickness, roundness=roundness, 
-                        iterations=iterations, twoSided=twoSided, color=path.svgState.fill, shadeMode=mode, trim=trim) 
-            meshes.append( ("path" + str(i), mesh) )
+            mesh = inflateLinearPath(path, spacing=spacing, thickness=thickness, roundness=roundness, iterations=iterations, ignoreColor=ignoreColor)
+            meshes.append( ("inflated_path" + str(i), mesh) )
         i += 1
 
     return meshes
@@ -151,7 +162,7 @@ if __name__ == '__main__':
     spacing = 1.
     output = "stl"
     iterations = None
-    width = 0.5
+    width = 0.5 # TODO
     twoSided = False
     trim = True
     
@@ -165,7 +176,7 @@ if __name__ == '__main__':
     
     try:
         opts, args = getopt.getopt(sys.argv[1:], "h", 
-                        ["help", "stl", "roundness=", "thickness=", "resolution=", "format=", "iterations=", "width=", "xtwo-sided=", "two-sided", "trim="])
+                        ["help", "stl", "roundness=", "thickness=", "resolution=", "format=", "iterations=", "width=", "two-sided=", "two-sided", "trim="])
         # TODO: support width for ribbon-thin stuff
 
         if len(args) == 0:
@@ -205,10 +216,11 @@ if __name__ == '__main__':
         help(exitCode=1)
         sys.exit(2)
         
-    meshes = inflateSVGFile(args[0], thickness=thickness, roundness=roundness, iterations=iterations, width=width, spacing=spacing, twoSided=twoSided, trim=trim)
+    meshes = inflateSVGFile(args[0], thickness=thickness, roundness=roundness, iterations=iterations, spacing=spacing, twoSided=twoSided, trim=trim)
     
     if format == 'stl':
         mesh = [datum for name,mesh in meshes for datum in mesh]
+        print mesh
         saveSTL(None, mesh)
     else:
         scad = ""

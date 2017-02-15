@@ -107,7 +107,7 @@ def polygonsToSVG(vertices, polys):
         for i in range(len(p)+1):
             path += 'L' if i else 'M'
             path += '%.6f %.6f ' % ( vertices[p[i % len(p)]] - (minX,minY) )
-        path += '/>'
+        path += '"/>'
         svgArray.append(path)
     svgArray.append('</svg>')
     return '\n'.join(svgArray)

@@ -55,7 +55,7 @@ def toSCADModule(polys, moduleName):
         line += ",".join( "[" + ",".join(str(pointsDict[tuple(v)]) for v in reversed(face)) + "]" for face in poly ) + "]"
         line += ");"
         scad.append(line)
-    scad.append("}")
+    scad.append("}\n")
     return "\n".join(scad)
 
 def saveSCAD(filename, polys, moduleName="object1", quiet=False):

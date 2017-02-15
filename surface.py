@@ -176,3 +176,4 @@ module %s() {
     
     print("Saving "+outPath)
     with open(outPath, "w") as f: f.write(scadModule)
+    
