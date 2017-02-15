@@ -1,10 +1,12 @@
+from __future__ import division
 from vector import *
 from exportmesh import *
 import itertools
 import os.path
 
 def surfaceToMesh(data, center=False, twoSided=False, zClip=None, tolerance=0., color=None):
-    # clipping is done before z-scaling
+    # if center is False, the mesh coordinates are guaranteed to be integers corresponding exactly
+    # to the points in the data, plus a layer of neighboring points.
     width = len(data)
     height = len(data[0])
     xMin = width - 1
@@ -39,7 +41,7 @@ def surfaceToMesh(data, center=False, twoSided=False, zClip=None, tolerance=0., 
     if center:
         offset = Vector( -0.5 * (xMin + xMax), -0.5 * (yMin + yMax) )
     else:
-        offset = Vector( 0., 0. )
+        offset = Vector( 0, 0 )
         
     mesh = []
     
@@ -55,11 +57,13 @@ def surfaceToMesh(data, center=False, twoSided=False, zClip=None, tolerance=0., 
                 z1,z2,z3 = map(getValue, (v1,v2,v3))
                 if (z1,z2,z3) == (0.,0.,0.):
                     return []
-                v1,v2,v3 = map((lambda w : w+offset), (v1,v2,v3))
-                output = [(color,((v1.x,v1.y,z1), (v2.x,v2.y,z2), (v3.x,v3.y,z3)))]
+                v1 += offset
+                v2 += offset
+                v3 += offset
+                output = [(color,(Vector(v1.x,v1.y,z1), Vector(v2.x,v2.y,z2), Vector(v3.x,v3.y,z3)))]
                 if not twoSided:
                     z1,z2,z3 = 0.,0.,0.
-                output.append ( (color,((v3.x,v3.y,-z3), (v2.x,v2.y,-z2), (v1.x,v1.y,-z1))) )
+                output.append ( (color,(Vector(v3.x,v3.y,-z3), Vector(v2.x,v2.y,-z2), Vector(v1.x,v1.y,-z1))) )
                 return output
             
             if numPoints > 0:

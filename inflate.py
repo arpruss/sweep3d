@@ -1,6 +1,9 @@
+from __future__ import division
 from surface import *
 import svgpath.shader as shader
 import svgpath.parser as parser
+import sys
+import getopt
 from exportmesh import *
 
 def rasterizePolygon(polygon, spacing, shadeMode=shader.Shader.MODE_EVEN_ODD):
@@ -30,9 +33,14 @@ def rasterizePolygon(polygon, spacing, shadeMode=shader.Shader.MODE_EVEN_ODD):
 def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, thickness=10., roundness=1., iterations=None, center=False, twoSided=False):
     # polygon is described by list of (start,stop) pairs, where start and stop are complex numbers
     raster,bottomLeft = rasterizePolygon(polygon, spacing, shadeMode=shadeMode)
+    rasterWidth = len(raster)
+    rasterHeight = len(raster[0])
     bottomLeftV = Vector(bottomLeft)
     surface = inflateRaster(raster, thickness=thickness, roundness=roundness, iterations=iterations)
-    mesh0 = surfaceToMesh(surface, center=False, twoSided=True)
+    mesh0 = surfaceToMesh(surface, center=False, twoSided=twoSided)
+    
+    def scaleFace(face):
+        return tuple(v*spacing+bottomLeftV for v in face)
 
     def trimFace(face, polygon, shadeMode=shader.Shader.MODE_EVEN_ODD):
         def trimLine(start, stop):
@@ -73,24 +81,32 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
                 z = z0 + state.bestLength * normDelta
                 return Vector(z.real, z.imag, 0.)
             else:
+                print "not found"
                 return stop
     
-        zeroCount = sum(1 for v in face if v.z == 0.)
-        if zeroCount == 3 or zeroCount == 0:
-            return [face]
-        elif zeroCount == 2:
-            if face[1].z != 0:
+        def inside(v):
+            if v[0] < 0 or v[0] >= rasterWidth or v[1] < 0 or v[1] >= rasterHeight:
+                return False
+            return raster[v[0]][v[1]]
+            
+        outsideCount = sum(1 for v in face if not inside(v))
+        if outsideCount == 3 or outsideCount == 0:
+            return [scaleFace(face)]
+        elif outsideCount == 2:
+            if inside(face[1]):
                 face = (face[1], face[2], face[0])
-            elif face[2].z != 0:
+            elif inside(face[2]):
                 face = (face[2], face[0], face[1])
-            # now, the first vertex has non-zero z
+            # now, the first vertex is inside and the others are outside
+            face = scaleFace(face)
             return [ (face[0], trimLine(face[0], face[1]), trimLine(face[0], face[2])) ]
-        else: # zeroCount == 1
-            if face[0].z == 0.:
+        else: # outsideCount == 1
+            if not inside(face[0]):
                 face = (face[1], face[2], face[0])
-            elif face[1].z == 0.:
+            elif not inside(face[1]):
                 face = (face[2], face[0], face[1])
-            # now, the first two vertices have non-zero z
+            # now, the first two vertices are inside, and the third is outside
+            face = scaleFace(face)
             closest0 = trimLine(face[0], face[2])
             closest1 = trimLine(face[1], face[2])
             if closest0 != closest1:
@@ -100,27 +116,19 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
 
     mesh = []
     for rgb,face in mesh0:
-        face = tuple( Vector(v)*spacing+bottomLeftV for v in face )
-        add = (face,)
-        for v in face:
-            if v.z == 0.:
-                add = trimFace(face, polygon, shadeMode=shader.Shader.MODE_EVEN_ODD)
-                break
-        if twoSided:
-            mesh += ((rgb,face) for face in add)
-        else:
-            for face in add:
-                def clip(v):
-                    if v.z < 0.:
-                        return Vector(v.x,v.y,0.)
-                    else:
-                        return v
-                mesh.append((rgb,Vector(clip(v) for v in face)))
+        for face2 in trimFace(face, polygon):
+            mesh.append((rgb, face2))
     return mesh
     
 if __name__ == '__main__':
-    import math
     import cmath
-    shape = [ [30*cmath.exp(2*math.pi*1j*k/50),30*cmath.exp(2*math.pi*1j*(k+1)/50)] for k in range(50) ]
-    saveSCAD("circle.scad", inflatePolygon(shape,twoSided=False,roundness=0.99,spacing=2))
-    
+    opts, args = getopt.getopt(sys.argv[1:], "e:UR:Uhdulw:P:o:Oc:LT:M:m:A:XHrf:na:D:t:s:S:x:y:z:Z:p:f:F:", 
+                    ["help", "down", "up", "lower-left", "allow-repeats", "no-allow-repeats", "scale=", "config-file=",
+                    "area=", 'align-x=', 'align-y=', 'optimization-time=', "pens=",
+                    'input-dpi=', 'tolerance=', 'send=', 'send-speed=', 'work-z=', 'lift-delta-z=', 'safe-delta-z=',
+                    'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'no-hpgl-out', 'shading-threshold=',
+                    'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline', 
+                    'pause-at-start', 'no-pause-at-start', 'min-x=', 'max-x=', 'min-y=', 'max-y=',
+                    'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort', 'simulation', 'no-simulation', 'tool-offset=', 'overcut=', 
+                    'boolean-shading-crosshatch=', 'boolean-sort=', 'tool-mode=', 'send-and-save=', 'direction=' ], )
+    saveSCAD("circle.scad", inflatePolygon([ (30 * cmath.exp( 2 * 3.141519 * 1j * k / 40 ), 30 * cmath.exp( 2 * 3.141519 * 1j * (k+1) / 40 )) for k in range(40) ]))
