@@ -127,6 +127,6 @@ def saveSTL(filename, mesh, swapYZ=False, quiet=False):
     else:
         if sys.platform == "win32":
             import os, msvcrt
-            mcvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
+            msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
         writeSTL(sys.stdout)
             

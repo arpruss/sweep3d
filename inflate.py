@@ -30,7 +30,7 @@ def rasterizePolygon(polygon, spacing, shadeMode=shader.Shader.MODE_EVEN_ODD):
     
     return raster,complex(left,bottom)
     
-def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, thickness=10., roundness=1., iterations=None, center=False, twoSided=False, color=None):
+def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, thickness=10., roundness=1., iterations=None, center=False, twoSided=False, color=None, trim=True):
     # polygon is described by list of (start,stop) pairs, where start and stop are complex numbers
     raster,bottomLeft = rasterizePolygon(polygon, spacing, shadeMode=shadeMode)
     rasterWidth = len(raster)
@@ -39,10 +39,13 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
     surface = inflateRaster(raster, thickness=thickness, roundness=roundness, iterations=iterations)
     mesh0 = surfaceToMesh(surface, center=False, twoSided=twoSided, color=color)
     
-    def scaleFace(face):
-        return tuple(v*spacing+bottomLeftV for v in face)
+    def fixFace(face, polygon, trim=True):
+        def scaleFace(face):
+            return tuple(v*spacing+bottomLeftV for v in face)
 
-    def trimFace(face, polygon, shadeMode=shader.Shader.MODE_EVEN_ODD):
+        if not trim:
+            return [scaleFace(face)]
+    
         def trimLine(start, stop):
             delta = (stop - start).toComplex() # projects to 2D
             if delta == 0j:
@@ -89,7 +92,9 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
             return raster[v[0]][v[1]]
             
         outsideCount = sum(1 for v in face if not inside(v))
-        if outsideCount == 3 or outsideCount == 0:
+        if outsideCount == 3:
+            return []
+        elif outsideCount == 0:
             return [scaleFace(face)]
         elif outsideCount == 2:
             if inside(face[1]):
@@ -115,11 +120,11 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
 
     mesh = []
     for rgb,face in mesh0:
-        for face2 in trimFace(face, polygon):
+        for face2 in fixFace(face, polygon, trim=trim):
             mesh.append((rgb, face2))
     return mesh
     
-def inflateSVGFile(svgFile, spacing=1., thickness=10., roundness=1., iterations=None, twoSided=False, width=0.5):
+def inflateSVGFile(svgFile, spacing=1., thickness=10., roundness=1., iterations=None, twoSided=False, width=0.5, trim=True):
     meshes = []
 
     paths = parser.getPathsFromSVGFile(svgFile)[0]
@@ -132,7 +137,7 @@ def inflateSVGFile(svgFile, spacing=1., thickness=10., roundness=1., iterations=
                 lines.append((line.start,line.end))
             mode = shader.Shader.MODE_NONZERO if path.svgState.fillRule == 'nonzero' else shader.Shader.MODE_EVEN_ODD
             mesh = inflatePolygon(lines, spacing=spacing, thickness=thickness, roundness=roundness, 
-                        iterations=iterations, twoSided=twoSided, color=path.svgState.fill, shadeMode=mode) 
+                        iterations=iterations, twoSided=twoSided, color=path.svgState.fill, shadeMode=mode, trim=trim) 
             meshes.append( ("path" + str(i), mesh) )
         i += 1
 
@@ -148,6 +153,7 @@ if __name__ == '__main__':
     iterations = None
     width = 0.5
     twoSided = False
+    trim = True
     
     def help(exitCode=0):
         help = """python inflate.py [options] filename.svg"""
@@ -159,7 +165,7 @@ if __name__ == '__main__':
     
     try:
         opts, args = getopt.getopt(sys.argv[1:], "h", 
-                        ["help", "roundness=", "thickness=", "resolution=", "format=", "iterations=", "width=", "two-sided="])
+                        ["help", "roundness=", "thickness=", "resolution=", "format=", "iterations=", "width=", "two-sided=", "trim="])
         # TODO: support width for ribbon-thin stuff
 
         if len(args) == 0:
@@ -185,16 +191,20 @@ if __name__ == '__main__':
                 width = float(arg)
             elif opt == '--two-sided':
                 twoSided = bool(int(arg))
+            elif opt == "--trim":
+                trim = bool(int(arg))
+                
+            i += 1
                 
     except getopt.GetoptError as e:
         sys.stderr.write(str(e)+"\n")
         help(exitCode=1)
         sys.exit(2)
         
-    meshes = inflateSVGFile(args[0], thickness=thickness, roundness=roundness, iterations=iterations, width=width, spacing=spacing, twoSided=twoSided)
+    meshes = inflateSVGFile(args[0], thickness=thickness, roundness=roundness, iterations=iterations, width=width, spacing=spacing, twoSided=twoSided, trim=trim)
     
     if format == 'stl':
-        mesh = [datum for datum in mesh for name,mesh in meshes]
+        mesh = [datum for name,mesh in meshes for datum in mesh]
         saveSTL(None, mesh)
     else:
         scad = ""
