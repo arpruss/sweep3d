@@ -1,10 +1,9 @@
 from vector import *
 from exportmesh import *
-from PIL import Image
 import itertools
 import os.path
 
-def surfaceToMesh(data, center=False, twoSided=False, zClip=None, xScale=1., yScale=1., zScale=1., tolerance=0., color=None):
+def surfaceToMesh(data, center=False, twoSided=False, zClip=None, tolerance=0., color=None):
     # clipping is done before z-scaling
     width = len(data)
     height = len(data[0])
@@ -129,7 +128,25 @@ def inflateRaster(raster, thickness=10., roundness=1., iterations=None):
     return [ [datum / maxZ * thickness for datum in col] for col in data ]
 
 
-def inflateImage(image, thickness=10., roundness=1., iterations=None):
+if __name__ == '__main__':
+    from PIL import Image
+
+    inPath = sys.argv[1]
+    outPath = os.path.splitext(inPath)[0] + ".scad"
+    baseName = os.path.splitext(os.path.basename(outPath))[0]
+    
+    thickness = 10.
+    roundness = 1.
+    iterations = None
+    if len(sys.argv)>2:
+        thickness = float(sys.argv[2])
+    if len(sys.argv)>3:
+        roundness = float(sys.argv[3])
+    if len(sys.argv)>4:
+        iterations = int(sys.argv[4])
+
+    image = Image.open(inPath).convert('RGBA')
+    
     def inside(x,y):
         rgb = image.getpixel((x,image.size[1]-1-y))
         if len(rgb) > 3 and rgb[3] == 0:
@@ -138,24 +155,8 @@ def inflateImage(image, thickness=10., roundness=1., iterations=None):
 
     raster = [ [ inside(x,y) for y in range(image.size[1]) ] for x in range(image.size[0]) ]
     
-    return inflateRaster(image, thickness=thickness, roundness=roundness, iterations=itierations)
-        
-if __name__ == '__main__':
-    inPath = sys.argv[1]
-    outPath = os.path.splitext(inPath)[0] + ".scad"
-    baseName = os.path.splitext(os.path.basename(outPath))[0]
-    
-    thickness = 10.
-    roundness = 1.
-    if len(sys.argv)>2:
-        thickness = float(sys.argv[2])
-    if len(sys.argv)>3:
-        roundness = float(sys.argv[3])
-
-    image = Image.open(inPath).convert('RGBA')
-    
     print("Inflating...")
-    data = inflateImage(image,thickness=thickness,roundness=roundness)
+    data = inflateRaster(raster,thickness=thickness,roundness=roundness,iterations=iterations)
     
     scadModule = toSCADModule(surfaceToMesh(data, twoSided=False, center=True), baseName+"_raw")
     scadModule += """

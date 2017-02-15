@@ -33,7 +33,7 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
     raster,bottomLeft = rasterizePolygon(polygon, spacing, shadeMode=shadeMode)
     bottomLeftV = Vector(bottomLeft)
     surface = inflateRaster(raster, thickness=thickness, roundness=roundness, iterations=iterations)
-    mesh0 = surfaceToMesh(surface, center=False, twoSided=twoSided)
+    mesh0 = surfaceToMesh(surface, center=False, twoSided=True)
 
     def trimFace(face, polygon, shadeMode=shader.Shader.MODE_EVEN_ODD):
         def trimLine(start, stop):
@@ -72,7 +72,7 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
                     update(x)
             if state.changed:
                 z = z0 + state.bestLength * normDelta
-                return (z.real, z.imag, 0.)
+                return Vector(z.real, z.imag, 0.)
             else:
                 return stop
     
@@ -107,11 +107,20 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
             if v.z == 0.:
                 add = trimFace(face, polygon, shadeMode=shader.Shader.MODE_EVEN_ODD)
                 break
-        mesh += ((rgb,face) for face in add)
+        if twoSided:
+            mesh += ((rgb,face) for face in add)
+        else:
+            for face in add:
+                def clip(v):
+                    if v.z < 0.:
+                        return Vector(v.x,v.y,0.)
+                    else:
+                        return v
+                mesh.append((rgb,Vector(clip(v) for v in face)))
     return mesh
     
 if __name__ == '__main__':
     import math
     import cmath
     shape = [ [30*cmath.exp(2*math.pi*1j*k/50),30*cmath.exp(2*math.pi*1j*(k+1)/50)] for k in range(50) ]
-    saveSCAD("triangle.scad", inflatePolygon(shape,twoSided=True))
+    saveSCAD("circle.scad", inflatePolygon(shape,twoSided=False,roundness=0.95))
