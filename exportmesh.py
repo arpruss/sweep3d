@@ -1,6 +1,7 @@
 from struct import pack
 from vector import *
 from numbers import Number 
+import os
 import sys
 
 def isColorTriangleList(polys):
@@ -103,9 +104,9 @@ def saveSTL(filename, mesh, swapYZ=False, quiet=False):
             minVector = Vector(min(minVector[i], vertex[i]) for i in range(3))
     minVector -= Vector(0.001,0.001,0.001) # make sure all STL coordinates are strictly positive as per Wikipedia
     
-    def writeSTL(f):
-        f.write(pack("80s",b''))
-        f.write(pack("<I",numTriangles))
+    def writeSTL(write):
+        write(pack("80s",b''))
+        write(pack("<I",numTriangles))
         for rgb,tri in mesh:
             if mono:
                 color = 0
@@ -116,17 +117,14 @@ def saveSTL(filename, mesh, swapYZ=False, quiet=False):
                     rgb = tuple(min(255,max(0,int(0.5 + 255 * comp))) for comp in rgb)
                 color = 0x8000 | ( (rgb[0] >> 3) << 10 ) | ( (rgb[1] >> 3) << 5 ) | ( (rgb[2] >> 3) << 0 )
             normal = (Vector(tri[1])-Vector(tri[0])).cross(Vector(tri[2])-Vector(tri[0])).normalize()
-            f.write(pack("<3f", *(matrix*normal)))
+            write(pack("<3f", *(matrix*normal)))
             for vertex in tri:
-                f.write(pack("<3f", *(matrix*(vertex-minVector))))
-            f.write(pack("<H", color))            
+                write(pack("<3f", *(matrix*(vertex-minVector))))
+            write(pack("<H", color))            
 
     if filename:
         with open(filename, "wb") as f:
-            writeSTL(f)
+            writeSTL(f.write)
     else:
-        if sys.platform == "win32":
-            import os, msvcrt
-            msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
-        writeSTL(sys.stdout)
+        writeSTL(lambda data : os.write(sys.stdout.fileno(), data))
             

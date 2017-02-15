@@ -165,6 +165,7 @@ if __name__ == '__main__':
     width = 0.5 # TODO
     twoSided = False
     trim = True
+    outfile = None
     
     def help(exitCode=0):
         help = """python inflate.py [options] filename.svg"""
@@ -176,7 +177,7 @@ if __name__ == '__main__':
     
     try:
         opts, args = getopt.getopt(sys.argv[1:], "h", 
-                        ["help", "stl", "roundness=", "thickness=", "resolution=", "format=", "iterations=", "width=", "two-sided=", "two-sided", "trim="])
+                        ["help", "stl", "roundness=", "thickness=", "resolution=", "format=", "iterations=", "width=", "two-sided=", "two-sided", "output=", "trim="])
         # TODO: support width for ribbon-thin stuff
 
         if len(args) == 0:
@@ -208,6 +209,8 @@ if __name__ == '__main__':
                 twoSided = True
             elif opt == "--trim":
                 trim = bool(int(arg))
+            elif opt == "--output":
+                outfile = arg
                 
             i += 1
                 
@@ -220,8 +223,7 @@ if __name__ == '__main__':
     
     if format == 'stl':
         mesh = [datum for name,mesh in meshes for datum in mesh]
-        print mesh
-        saveSTL(None, mesh)
+        saveSTL(outfile, mesh)
     else:
         scad = ""
         for name,mesh in meshes:
@@ -229,4 +231,7 @@ if __name__ == '__main__':
             scad += "\n"
         for name,_ in meshes:
             scad += name + "();\n"
-        print(scad)    
+        if outfile:
+            with open(outfile, "w") as f: f.write(scad)
+        else:
+            print(scad)    
