@@ -102,7 +102,7 @@ def inflateRaster(raster, thickness=10., roundness=1., iterations=None):
     width = len(raster)
     height = len(raster[0])
         
-    if iterations == None:
+    if not iterations:
         iterations = 60 * max(width,height)
         
     data = [ [0. for y in range(height)] for x in range(width) ]

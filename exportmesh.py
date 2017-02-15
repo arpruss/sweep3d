@@ -66,9 +66,13 @@ def saveSCAD(filename, polys, moduleName="object1", quiet=False):
     quiet: give no status message if set
     """
     if not quiet: sys.stderr.write("Saving %s\n" % filename)
-    with open(filename, "w") as f:
-        f.write(toSCADModule(polys, moduleName))
-        f.write("\n" + moduleName + "();\n")
+    if filename:
+        with open(filename, "w") as f:
+            f.write(toSCADModule(polys, moduleName))
+            f.write("\n" + moduleName + "();\n")
+    else:
+        sys.stdout.write(toSCADModule(polys, moduleName))
+        sys.stdout.write("\n" + moduleName + "();\n")
 
 def saveSTL(filename, mesh, swapYZ=False, quiet=False):
     """
@@ -98,8 +102,8 @@ def saveSTL(filename, mesh, swapYZ=False, quiet=False):
             vertex = matrix*vertex
             minVector = Vector(min(minVector[i], vertex[i]) for i in range(3))
     minVector -= Vector(0.001,0.001,0.001) # make sure all STL coordinates are strictly positive as per Wikipedia
-     
-    with open(filename, "wb") as f:
+    
+    def writeSTL(f):
         f.write(pack("80s",b''))
         f.write(pack("<I",numTriangles))
         for rgb,tri in mesh:
@@ -116,4 +120,13 @@ def saveSTL(filename, mesh, swapYZ=False, quiet=False):
             for vertex in tri:
                 f.write(pack("<3f", *(matrix*(vertex-minVector))))
             f.write(pack("<H", color))            
-                
+
+    if filename:
+        with open(filename, "wb") as f:
+            writeSTL(f)
+    else:
+        if sys.platform == "win32":
+            import os, msvcrt
+            mcvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
+        writeSTL(sys.stdout)
+            

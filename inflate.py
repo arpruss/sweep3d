@@ -21,7 +21,7 @@ def rasterizePolygon(polygon, spacing, shadeMode=shader.Shader.MODE_EVEN_ODD):
     raster = [[False for y in range(height)] for x in range(width)]
 
     for line in lines:
-        y = int((line[0].imag - bottom) / spacing)
+        y = int((line[0].imag - bottom) / spacing + 0.5)
         x = int((line[0].real - left) / spacing)
         while left + x * spacing < line[1].real:
             if line[0].real < left + x * spacing:
@@ -30,14 +30,14 @@ def rasterizePolygon(polygon, spacing, shadeMode=shader.Shader.MODE_EVEN_ODD):
     
     return raster,complex(left,bottom)
     
-def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, thickness=10., roundness=1., iterations=None, center=False, twoSided=False):
+def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, thickness=10., roundness=1., iterations=None, center=False, twoSided=False, color=None):
     # polygon is described by list of (start,stop) pairs, where start and stop are complex numbers
     raster,bottomLeft = rasterizePolygon(polygon, spacing, shadeMode=shadeMode)
     rasterWidth = len(raster)
     rasterHeight = len(raster[0])
     bottomLeftV = Vector(bottomLeft)
     surface = inflateRaster(raster, thickness=thickness, roundness=roundness, iterations=iterations)
-    mesh0 = surfaceToMesh(surface, center=False, twoSided=twoSided)
+    mesh0 = surfaceToMesh(surface, center=False, twoSided=twoSided, color=color)
     
     def scaleFace(face):
         return tuple(v*spacing+bottomLeftV for v in face)
@@ -81,7 +81,6 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
                 z = z0 + state.bestLength * normDelta
                 return Vector(z.real, z.imag, 0.)
             else:
-                print "not found"
                 return stop
     
         def inside(v):
@@ -120,15 +119,88 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
             mesh.append((rgb, face2))
     return mesh
     
+def inflateSVGFile(svgFile, spacing=1., thickness=10., roundness=1., iterations=None, twoSided=False, width=0.5):
+    meshes = []
+
+    paths = parser.getPathsFromSVGFile(svgFile)[0]
+    
+    i = 0
+    for path in paths:
+        if path.svgState.fill is not None:
+            lines = []
+            for line in path.linearApproximation(error=spacing*.1):
+                lines.append((line.start,line.end))
+            mode = shader.Shader.MODE_NONZERO if path.svgState.fillRule == 'nonzero' else shader.Shader.MODE_EVEN_ODD
+            mesh = inflatePolygon(lines, spacing=spacing, thickness=thickness, roundness=roundness, 
+                        iterations=iterations, twoSided=twoSided, color=path.svgState.fill, shadeMode=mode) 
+            meshes.append( ("path" + str(i), mesh) )
+        i += 1
+
+    return meshes
+    
 if __name__ == '__main__':
     import cmath
-    opts, args = getopt.getopt(sys.argv[1:], "e:UR:Uhdulw:P:o:Oc:LT:M:m:A:XHrf:na:D:t:s:S:x:y:z:Z:p:f:F:", 
-                    ["help", "down", "up", "lower-left", "allow-repeats", "no-allow-repeats", "scale=", "config-file=",
-                    "area=", 'align-x=', 'align-y=', 'optimization-time=', "pens=",
-                    'input-dpi=', 'tolerance=', 'send=', 'send-speed=', 'work-z=', 'lift-delta-z=', 'safe-delta-z=',
-                    'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'no-hpgl-out', 'shading-threshold=',
-                    'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline', 
-                    'pause-at-start', 'no-pause-at-start', 'min-x=', 'max-x=', 'min-y=', 'max-y=',
-                    'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort', 'simulation', 'no-simulation', 'tool-offset=', 'overcut=', 
-                    'boolean-shading-crosshatch=', 'boolean-sort=', 'tool-mode=', 'send-and-save=', 'direction=' ], )
-    saveSCAD("circle.scad", inflatePolygon([ (30 * cmath.exp( 2 * 3.141519 * 1j * k / 40 ), 30 * cmath.exp( 2 * 3.141519 * 1j * (k+1) / 40 )) for k in range(40) ]))
+    
+    roundness = 1.
+    thickness = 10.
+    spacing = 1.
+    output = "stl"
+    iterations = None
+    width = 0.5
+    twoSided = False
+    
+    def help(exitCode=0):
+        help = """python inflate.py [options] filename.svg"""
+        if exitCode:
+            sys.stderr.write(help + "\n")
+        else:
+            print(help)
+        sys.exit(exitCode)
+    
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], "h", 
+                        ["help", "roundness=", "thickness=", "resolution=", "format=", "iterations=", "width=", "two-sided="])
+        # TODO: support width for ribbon-thin stuff
+
+        if len(args) == 0:
+            raise getopt.GetoptError("invalid commandline")
+
+        i = 0
+        while i < len(opts):
+            opt,arg = opts[i]
+            if opt in ('-h', '--help'):
+                help()
+                sys.exit(0)
+            elif opt == '--roundness':
+                roundness = float(arg)
+            elif opt == '--thickness':
+                thickness = float(arg)
+            elif opt == '--resolution':
+                spacing = float(arg)
+            elif opt == '--format':
+                format = arg
+            elif opt == '--iterations':
+                iterations = int(arg)
+            elif opt == '--width':
+                width = float(arg)
+            elif opt == '--two-sided':
+                twoSided = bool(int(arg))
+                
+    except getopt.GetoptError as e:
+        sys.stderr.write(str(e)+"\n")
+        help(exitCode=1)
+        sys.exit(2)
+        
+    meshes = inflateSVGFile(args[0], thickness=thickness, roundness=roundness, iterations=iterations, width=width, spacing=spacing, twoSided=twoSided)
+    
+    if format == 'stl':
+        mesh = [datum for datum in mesh for name,mesh in meshes]
+        saveSTL(None, mesh)
+    else:
+        scad = ""
+        for name,mesh in meshes:
+            scad += toSCADModule(mesh, moduleName=name)
+            scad += "\n"
+        for name,_ in meshes:
+            scad += name + "();\n"
+        print(scad)    
