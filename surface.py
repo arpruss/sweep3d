@@ -37,11 +37,9 @@ def surfaceToMesh(data, center=False, twoSided=False, zClip=None, tolerance=0., 
                 yMax = max(yMax, y)
     
     if center:
-        offsetX = -0.5 * (xMin + xMax)
-        offsetY = -0.5 * (yMin + yMax)
+        offset = Vector( -0.5 * (xMin + xMax), -0.5 * (yMin + yMax) )
     else:
-        offsetX = 0
-        offsetY = 0
+        offset = Vector( 0., 0. )
         
     mesh = []
     
@@ -57,8 +55,7 @@ def surfaceToMesh(data, center=False, twoSided=False, zClip=None, tolerance=0., 
                 z1,z2,z3 = map(getValue, (v1,v2,v3))
                 if (z1,z2,z3) == (0.,0.,0.):
                     return []
-                z1,z2,z3 = zScale * Vector(z1,z2,z3)
-                v1,v2,v3 = map((lambda w : Vector((w.x+offsetX)*xScale, (w.y+offsetY)*yScale)), (v1,v2,v3))
+                v1,v2,v3 = map((lambda w : w+offset), (v1,v2,v3))
                 output = [(color,((v1.x,v1.y,z1), (v2.x,v2.y,z2), (v3.x,v3.y,z3)))]
                 if not twoSided:
                     z1,z2,z3 = 0.,0.,0.

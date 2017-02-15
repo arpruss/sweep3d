@@ -27,7 +27,6 @@ def rasterizePolygon(polygon, spacing, shadeMode=shader.Shader.MODE_EVEN_ODD):
     
     return raster,complex(left,bottom)
     
-    
 def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, thickness=10., roundness=1., iterations=None, center=False, twoSided=False):
     # polygon is described by list of (start,stop) pairs, where start and stop are complex numbers
     raster,bottomLeft = rasterizePolygon(polygon, spacing, shadeMode=shadeMode)
