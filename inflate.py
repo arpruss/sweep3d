@@ -165,7 +165,7 @@ if __name__ == '__main__':
     
     try:
         opts, args = getopt.getopt(sys.argv[1:], "h", 
-                        ["help", "roundness=", "thickness=", "resolution=", "format=", "iterations=", "width=", "two-sided=", "trim="])
+                        ["help", "stl", "roundness=", "thickness=", "resolution=", "format=", "iterations=", "width=", "xtwo-sided=", "two-sided", "trim="])
         # TODO: support width for ribbon-thin stuff
 
         if len(args) == 0:
@@ -185,12 +185,16 @@ if __name__ == '__main__':
                 spacing = float(arg)
             elif opt == '--format':
                 format = arg
+            elif opt == "--stl":
+                format = "stl"
             elif opt == '--iterations':
                 iterations = int(arg)
             elif opt == '--width':
                 width = float(arg)
-            elif opt == '--two-sided':
+            elif opt == '--xtwo-sided':
                 twoSided = bool(int(arg))
+            elif opt == '--two-sided':
+                twoSided = True
             elif opt == "--trim":
                 trim = bool(int(arg))
                 
