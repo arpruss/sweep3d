@@ -125,11 +125,13 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
     return mesh
     
 def sortedApproximatePaths(paths,error=0.1):
-    paths = [path.linearApproximation(error=error) for path in paths]
+    paths = [path.linearApproximation(error=error) for path in paths if len(path)]
+    
     def key(path):
         top = min(min(line.start.imag,line.end.imag) for line in path)
         left = min(min(line.start.real,line.end.real) for line in path)
         return (top,left)
+        
     return sorted(paths, key=key)
 
 def inflateLinearPath(path, spacing=1., thickness=10., roundness=1., iterations=None, ignoreColor=False):
@@ -139,20 +141,30 @@ def inflateLinearPath(path, spacing=1., thickness=10., roundness=1., iterations=
     mode = shader.Shader.MODE_NONZERO if path.svgState.fillRule == 'nonzero' else shader.Shader.MODE_EVEN_ODD
     return inflatePolygon(lines, spacing=spacing, thickness=thickness, roundness=roundness, 
                 iterations=iterations, twoSided=twoSided, color=None if ignoreColor else path.svgState.fill, shadeMode=mode, trim=trim) 
-    
+
+class InflatedData(object):
+    pass
+                
 def inflateSVGFile(svgFile, spacing=1., thickness=10., roundness=1., iterations=None, twoSided=False, trim=True, ignoreColor=False):
-    meshes = []
+    data = InflatedData()
+    data.meshes = []
+    data.pointLists = []
 
     paths = sortedApproximatePaths( parser.getPathsFromSVGFile(svgFile)[0], error=spacing*0.1 )
     
-    i = 0
-    for path in paths:
+    for i,path in enumerate(paths):
         if path.svgState.fill is not None:
             mesh = inflateLinearPath(path, spacing=spacing, thickness=thickness, roundness=roundness, iterations=iterations, ignoreColor=ignoreColor)
-            meshes.append( ("inflated_path" + str(i), mesh) )
-        i += 1
+            data.meshes.append( ("inflated_path" + str(i), mesh) )
+        for j,subpath in enumerate(path.breakup()):
+            points = [subpath[0].start]
+            for line in subpath:
+                points.append(line.end)
+            if subpath.closed and points[0] != points[-1]:
+                points.append(points[0])
+            data.pointLists.append (( "points_path" + str(i) + "_" + str(j), points) )
 
-    return meshes
+    return data
     
 if __name__ == '__main__':
     import cmath
@@ -219,18 +231,36 @@ if __name__ == '__main__':
         help(exitCode=1)
         sys.exit(2)
         
-    meshes = inflateSVGFile(args[0], thickness=thickness, roundness=roundness, iterations=iterations, spacing=spacing, twoSided=twoSided, trim=trim)
+    data = inflateSVGFile(args[0], thickness=thickness, roundness=roundness, iterations=iterations, spacing=spacing, twoSided=twoSided, trim=trim)
     
     if format == 'stl':
-        mesh = [datum for name,mesh in meshes for datum in mesh]
+        mesh = [datum for name,mesh in data.meshes for datum in mesh]
         saveSTL(outfile, mesh)
     else:
-        scad = ""
-        for name,mesh in meshes:
+        scad = "polygonHeight = 1;\n"
+        for name,points in data.pointLists:
+            scad += name + " = [ " + ','.join('[%.9f,%.9f]' % (point.real,point.imag) for point in points) + " ];\n"
+            
+        scad += "\n";
+        
+        for name,mesh in data.meshes:
             scad += toSCADModule(mesh, moduleName=name)
             scad += "\n"
-        for name,_ in meshes:
+        
+        for name,_ in data.meshes:
             scad += name + "();\n"
+            
+        if data.pointLists:
+            scad += "module polygon_paths() {\n"
+            scad += "  linear_extrude(height=polygonHeight) {\n";
+            for name,points in data.pointLists:
+                if points[0] == points[-1]:
+                    scad += "  polygon(points="+name+");\n";
+            scad += "  }\n"
+            scad += "}\n"
+            
+            scad += "polygon_paths();\n"
+            
         if outfile:
             with open(outfile, "w") as f: f.write(scad)
         else:
