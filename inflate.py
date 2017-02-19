@@ -91,9 +91,9 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
             v = spacing * Vector(col,row) + bottomLeftV
             for i in range(len(deltasComplex)):
                 if not fastDistanceMap or inside(deltas[i]+(col,row)):
-                    map[col][row][i] = distanceToEdge( v.toComplex(), deltasComplex[i] )
+                    map[col][row][i] = distanceToEdge( v.toComplex(), deltasComplex[i] ) / spacing
                 else:
-                    map[col][row][i] = deltaLengths[i]
+                    map[col][row][i] = deltaLengths[i] / spacing
             
     message("Inflating")
     
@@ -179,7 +179,7 @@ def inflateLinearPath(path, spacing=1., thickness=10., roundness=1., iterations=
 class InflatedData(object):
     pass
                 
-def inflateSVGFile(svgFile, spacing=1., thickness=10., roundness=1., iterations=None, twoSided=False, trim=True, ignoreColor=False, inflate=True):
+def inflateSVGFile(svgFile, spacing=1., thickness=10., roundness=1., iterations=None, twoSided=False, trim=True, ignoreColor=False, inflate=True, baseName="path"):
     data = InflatedData()
     data.meshes = []
     data.pointLists = []
@@ -191,14 +191,14 @@ def inflateSVGFile(svgFile, spacing=1., thickness=10., roundness=1., iterations=
         inflateThis = inflate and path.svgState.fill is not None
         if inflateThis:
             mesh = inflateLinearPath(path, spacing=spacing, thickness=thickness, roundness=roundness, iterations=iterations, ignoreColor=ignoreColor)
-            data.meshes.append( ("inflatned_path" + str(i), mesh) )
+            data.meshes.append( ("inflated_" + baseName + "_" + str(i), mesh) )
         for j,subpath in enumerate(path.breakup()):
             points = [subpath[0].start]
             for line in subpath:
                 points.append(line.end)
             if subpath.closed and points[0] != points[-1]:
                 points.append(points[0])
-            data.pointLists.append(( "points_path" + str(i) + "_" + str(j), points) )
+            data.pointLists.append(( "points_" + baseName + "_" + str(i) + "_" + str(j), points) )
             if not inflateThis:
                 data.uninflatedPointLists.append(data.pointsLists[-1])
 
@@ -217,6 +217,7 @@ if __name__ == '__main__':
     trim = True
     outfile = None
     inflate = True
+    baseName = "path"
     
     def help(exitCode=0):
         help = """python inflate.py [options] filename.svg"""
@@ -228,7 +229,7 @@ if __name__ == '__main__':
     
     try:
         opts, args = getopt.getopt(sys.argv[1:], "h", 
-                        ["help", "stl", "roundness=", "thickness=", "resolution=", "format=", "iterations=", "width=", "two-sided=", "two-sided", "output=", "trim=", "no-inflate", "xinflate="])
+                        ["help", "stl", "roundness=", "name=", "thickness=", "resolution=", "format=", "iterations=", "width=", "two-sided=", "two-sided", "output=", "trim=", "no-inflate", "xinflate="])
         # TODO: support width for ribbon-thin stuff
 
         if len(args) == 0:
@@ -262,6 +263,8 @@ if __name__ == '__main__':
                 inflate = False
             elif opt == '--two-sided':
                 twoSided = True
+            elif opt == "--name":
+                baseName = arg
             elif opt == "--trim":
                 trim = bool(int(arg))
             elif opt == "--output":
@@ -274,13 +277,15 @@ if __name__ == '__main__':
         help(exitCode=1)
         sys.exit(2)
         
-    data = inflateSVGFile(args[0], thickness=thickness, roundness=roundness, iterations=iterations, spacing=spacing, twoSided=twoSided, trim=trim, inflate=inflate)
+    data = inflateSVGFile(args[0], thickness=thickness, roundness=roundness, iterations=iterations, spacing=spacing, 
+        twoSided=twoSided, trim=trim, inflate=inflate, baseName=baseName)
     
     if format == 'stl':
         mesh = [datum for name,mesh in data.meshes for datum in mesh]
         saveSTL(outfile, mesh)
     else:
-        scad = "polygonHeight = 1;\n"
+        scad = "polygonHeight = 1;\n\n"
+        
         for name,points in data.pointLists:
             scad += name + " = [ " + ','.join('[%.9f,%.9f]' % (point.real,point.imag) for point in points) + " ];\n"
             
@@ -294,7 +299,7 @@ if __name__ == '__main__':
             scad += name + "();\n"
             
         if data.uninflatedPointLists:
-            scad += "module polygon_paths() {\n"
+            scad += "module polygon_%s() {\n" % baseName
             scad += "  linear_extrude(height=polygonHeight) {\n";
             for name,points in data.uninflatedPointLists:
                 if points[0] == points[-1]:
@@ -304,7 +309,7 @@ if __name__ == '__main__':
             scad += "  }\n"
             scad += "}\n"
             
-            scad += "polygon_paths();\n"
+            scad += "polygon_%s();\n" % baseName
             
         if outfile:
             with open(outfile, "w") as f: f.write(scad)
