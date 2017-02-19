@@ -145,24 +145,28 @@ def inflateLinearPath(path, spacing=1., thickness=10., roundness=1., iterations=
 class InflatedData(object):
     pass
                 
-def inflateSVGFile(svgFile, spacing=1., thickness=10., roundness=1., iterations=None, twoSided=False, trim=True, ignoreColor=False):
+def inflateSVGFile(svgFile, spacing=1., thickness=10., roundness=1., iterations=None, twoSided=False, trim=True, ignoreColor=False, inflate=True):
     data = InflatedData()
     data.meshes = []
     data.pointLists = []
+    data.uninflatedPointLists = []
 
     paths = sortedApproximatePaths( parser.getPathsFromSVGFile(svgFile)[0], error=spacing*0.1 )
     
     for i,path in enumerate(paths):
-        if path.svgState.fill is not None:
+        inflateThis = inflate and path.svgState.fill is not None
+        if inflateThis:
             mesh = inflateLinearPath(path, spacing=spacing, thickness=thickness, roundness=roundness, iterations=iterations, ignoreColor=ignoreColor)
-            data.meshes.append( ("inflated_path" + str(i), mesh) )
+            data.meshes.append( ("inflatned_path" + str(i), mesh) )
         for j,subpath in enumerate(path.breakup()):
             points = [subpath[0].start]
             for line in subpath:
                 points.append(line.end)
             if subpath.closed and points[0] != points[-1]:
                 points.append(points[0])
-            data.pointLists.append (( "points_path" + str(i) + "_" + str(j), points) )
+            data.pointLists.append(( "points_path" + str(i) + "_" + str(j), points) )
+            if not inflateThis:
+                data.uninflatedPointLists.append(data.pointsLists[-1])
 
     return data
     
@@ -178,6 +182,7 @@ if __name__ == '__main__':
     twoSided = False
     trim = True
     outfile = None
+    inflate = True
     
     def help(exitCode=0):
         help = """python inflate.py [options] filename.svg"""
@@ -189,7 +194,7 @@ if __name__ == '__main__':
     
     try:
         opts, args = getopt.getopt(sys.argv[1:], "h", 
-                        ["help", "stl", "roundness=", "thickness=", "resolution=", "format=", "iterations=", "width=", "two-sided=", "two-sided", "output=", "trim="])
+                        ["help", "stl", "roundness=", "thickness=", "resolution=", "format=", "iterations=", "width=", "two-sided=", "two-sided", "output=", "trim=", "no-inflate", "xinflate="])
         # TODO: support width for ribbon-thin stuff
 
         if len(args) == 0:
@@ -217,6 +222,10 @@ if __name__ == '__main__':
                 width = float(arg)
             elif opt == '--xtwo-sided':
                 twoSided = bool(int(arg))
+            elif opt == '--xinflate':
+                inflate = bool(int(arg))
+            elif opt == '--no-inflate':
+                inflate = False
             elif opt == '--two-sided':
                 twoSided = True
             elif opt == "--trim":
@@ -231,7 +240,7 @@ if __name__ == '__main__':
         help(exitCode=1)
         sys.exit(2)
         
-    data = inflateSVGFile(args[0], thickness=thickness, roundness=roundness, iterations=iterations, spacing=spacing, twoSided=twoSided, trim=trim)
+    data = inflateSVGFile(args[0], thickness=thickness, roundness=roundness, iterations=iterations, spacing=spacing, twoSided=twoSided, trim=trim, inflate=inflate)
     
     if format == 'stl':
         mesh = [datum for name,mesh in data.meshes for datum in mesh]
@@ -250,12 +259,14 @@ if __name__ == '__main__':
         for name,_ in data.meshes:
             scad += name + "();\n"
             
-        if data.pointLists:
+        if data.uninflatedPointLists:
             scad += "module polygon_paths() {\n"
             scad += "  linear_extrude(height=polygonHeight) {\n";
-            for name,points in data.pointLists:
+            for name,points in data.uninflatedPointLists:
                 if points[0] == points[-1]:
                     scad += "  polygon(points="+name+");\n";
+                else:
+                    "// "+name+" is not closed\n"
             scad += "  }\n"
             scad += "}\n"
             
