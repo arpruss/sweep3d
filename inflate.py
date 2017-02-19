@@ -111,7 +111,8 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
 
         if not trim:
             return [scaleFace(face)]
-    
+
+        # TODO: optimize by using cached data from the distance map
         def trimLine(start, stop):
             delta = (stop - start).toComplex() # projects to 2D
             if delta == 0j:
