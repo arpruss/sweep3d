@@ -78,7 +78,7 @@ def surfaceToMesh(data, center=False, twoSided=False, zClip=None, tolerance=0., 
 
 def inflateRaster(raster, thickness=10., roundness=1., iterations=None, 
         deltas=(Vector(-1,0),Vector(1,0),Vector(0,1),Vector(0,-1),Vector(-1,-1),Vector(1,1),Vector(-1,1),Vector(1,-1)), 
-        distanceToEdge=lambda (row,col,i): 1. if i<4 else 1.414 ):
+        distanceToEdge=lambda (row,col,i): 1. if i<4 else 1.414, eps=0.000001 ):
     """
     raster is a boolean matrix.
     
@@ -136,11 +136,11 @@ def inflateRaster(raster, thickness=10., roundness=1., iterations=None,
                     w = 0
                     for i in range(len(deltas)):
                         d = distanceToEdge(x,y,i)
-                        if d >= 0.99999 * deltaLengths[i]:
+                        if d >= (1-eps) * deltaLengths[i]:
                             s += z(deltas[i].x, deltas[i].y) / deltaLengths[i]
                             w += 1. / deltaLengths[i]
                         else:
-                            w += 1. / d
+                            w += 1. / max(d, eps)
                     
                     newData[x][y] = 1.0 + roundness * s / w
 
