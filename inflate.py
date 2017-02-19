@@ -36,7 +36,7 @@ def message(string, quiet=False):
     if not quiet:
         sys.stderr.write(string + "\n")
     
-def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, thickness=10., roundness=1., 
+def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, thickness=10., flatness=0., 
         iterations=None, center=False, twoSided=False, color=None, trim=True, fastDistanceMap=False):
     # polygon is described by list of (start,stop) pairs, where start and stop are complex numbers
     message("Rasterizing")
@@ -44,9 +44,6 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
     rasterWidth = len(raster)
     rasterHeight = len(raster[0])
     bottomLeftV = Vector(bottomLeft)
-    
-    if roundness < 0:
-        roundness = 0.
     
     def distanceToEdge(z0, direction):
         direction = direction / abs(direction)
@@ -85,7 +82,7 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
         return raster[v[0]][v[1]]
         
     message("Making edge distance map")
-    deltas = (Vector(-1,0), Vector(1,0), Vector(0,-1), Vector(0,1), Vector(-1,-1), Vector(1,1), Vector(-1,1), Vector(1,-1))
+    deltas = (Vector(-1,0), Vector(1,0), Vector(0,-1), Vector(0,1)) # , Vector(-1,-1), Vector(1,1), Vector(-1,1), Vector(1,-1))
     deltasComplex = tuple( v.toComplex() for v in deltas )
     deltaLengths = tuple( abs(d) for d in deltasComplex )
     map = [[[1. for i in range(len(deltas))] for row in range(rasterHeight)] for col in range(rasterWidth)]
@@ -103,9 +100,7 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
     def distanceFunction(col, row, i, map=map):
         return map[col][row][i]
     
-    roundness = 1-(1-roundness)*spacing
-    
-    surface = inflateRaster(raster, thickness=thickness, roundness=roundness, iterations=iterations, 
+    surface = inflateRaster(raster, thickness=thickness, flatness=flatness, iterations=iterations, 
                     deltas=deltas, distanceToEdge=distanceFunction)
     message("Meshing")
     mesh0 = surfaceToMesh(surface, center=False, twoSided=twoSided, color=color)
@@ -173,18 +168,18 @@ def sortedApproximatePaths(paths,error=0.1):
         
     return sorted(paths, key=key)
 
-def inflateLinearPath(path, spacing=1., thickness=10., roundness=1., iterations=None, ignoreColor=False):
+def inflateLinearPath(path, spacing=1., thickness=10., flatness=0., iterations=None, ignoreColor=False):
     lines = []
     for line in path:
         lines.append((line.start,line.end))
     mode = shader.Shader.MODE_NONZERO if path.svgState.fillRule == 'nonzero' else shader.Shader.MODE_EVEN_ODD
-    return inflatePolygon(lines, spacing=spacing, thickness=thickness, roundness=roundness, 
+    return inflatePolygon(lines, spacing=spacing, thickness=thickness, flatness=flatness, 
                 iterations=iterations, twoSided=twoSided, color=None if ignoreColor else path.svgState.fill, shadeMode=mode, trim=trim) 
 
 class InflatedData(object):
     pass
                 
-def inflateSVGFile(svgFile, spacing=1., thickness=10., roundness=1., iterations=None, twoSided=False, trim=True, ignoreColor=False, inflate=True, baseName="path"):
+def inflateSVGFile(svgFile, spacing=1., thickness=10., flatness=0., iterations=None, twoSided=False, trim=True, ignoreColor=False, inflate=True, baseName="path"):
     data = InflatedData()
     data.meshes = []
     data.pointLists = []
@@ -195,7 +190,7 @@ def inflateSVGFile(svgFile, spacing=1., thickness=10., roundness=1., iterations=
     for i,path in enumerate(paths):
         inflateThis = inflate and path.svgState.fill is not None
         if inflateThis:
-            mesh = inflateLinearPath(path, spacing=spacing, thickness=thickness, roundness=roundness, iterations=iterations, ignoreColor=ignoreColor)
+            mesh = inflateLinearPath(path, spacing=spacing, thickness=thickness, flatness=flatness, iterations=iterations, ignoreColor=ignoreColor)
             data.meshes.append( ("inflated_" + baseName + "_" + str(i), mesh) )
         for j,subpath in enumerate(path.breakup()):
             points = [subpath[0].start]
@@ -212,7 +207,7 @@ def inflateSVGFile(svgFile, spacing=1., thickness=10., roundness=1., iterations=
 if __name__ == '__main__':
     import cmath
     
-    roundness = 1.
+    flatness = 0.
     thickness = 10.
     spacing = 1.
     output = "stl"
@@ -234,7 +229,7 @@ if __name__ == '__main__':
     
     try:
         opts, args = getopt.getopt(sys.argv[1:], "h", 
-                        ["help", "stl", "roundness=", "name=", "thickness=", "resolution=", "format=", "iterations=", "width=", "two-sided=", "two-sided", "output=", "trim=", "no-inflate", "xinflate="])
+                        ["help", "stl", "flatness=", "name=", "thickness=", "resolution=", "format=", "iterations=", "width=", "two-sided=", "two-sided", "output=", "trim=", "no-inflate", "xinflate="])
         # TODO: support width for ribbon-thin stuff
 
         if len(args) == 0:
@@ -246,8 +241,8 @@ if __name__ == '__main__':
             if opt in ('-h', '--help'):
                 help()
                 sys.exit(0)
-            elif opt == '--roundness':
-                roundness = float(arg)
+            elif opt == '--flatness':
+                flatness = float(arg)
             elif opt == '--thickness':
                 thickness = float(arg)
             elif opt == '--resolution':
@@ -282,7 +277,7 @@ if __name__ == '__main__':
         help(exitCode=1)
         sys.exit(2)
         
-    data = inflateSVGFile(args[0], thickness=thickness, roundness=roundness, iterations=iterations, spacing=spacing, 
+    data = inflateSVGFile(args[0], thickness=thickness, flatness=flatness, iterations=iterations, spacing=spacing, 
         twoSided=twoSided, trim=trim, inflate=inflate, baseName=baseName)
     
     if format == 'stl':

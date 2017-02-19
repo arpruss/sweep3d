@@ -76,30 +76,28 @@ def surfaceToMesh(data, center=False, twoSided=False, zClip=None, tolerance=0., 
 
     return mesh
 
-def inflateRaster(raster, thickness=10., roundness=1., iterations=None, 
+def inflateRaster(raster, thickness=10., flatness=1., iterations=None, 
         deltas=(Vector(-1,0),Vector(1,0),Vector(0,1),Vector(0,-1),Vector(-1,-1),Vector(1,1),Vector(-1,1),Vector(1,-1)), 
         distanceToEdge=lambda (row,col,i): 1. if i<4 else 1.414, eps=0.000001 ):
     """
     raster is a boolean matrix.
     
-    roundness varies from 0.0 for maximally steep sides to 1.0 for a very gradual profile.
+    flatness varies from 0 for a very gradual profile to something around 2 or 3 for a very flat top.
     
     Here's a way to visualize how inflateImage() works. The white or transparent areas 
     of the image are cold, clamped at temperature 0. Above the image, there is a layer of
     insulation, and above that there is a flat heater at a fixed positive temperature. So, 
     the clamped areas stay at the fixed temperature, but away from the clamped areas, the image
     heats up. How the heat profile looks depends on how effective the layer of insulation is.
-    The effectiveness of the layer of insulation is measured by the roundness parameter.
-    When this parameter is close to zero, the unclamped areas all get to close to the heater
+    The effectiveness of the layer of insulation is measured by the flatness parameter.
+    When this parameter is high, the unclamped areas all get to close to the heater
     temperature, resulting in a very sharp heat gradient near the image boundaries, and flatness
-    further away from the boundaries. When the parameter is close to 1, the insulation is more
+    further away from the boundaries. When the parameter is close to 0, the insulation is more
     effective, and the temperature rise away from the boundaries is more gradual. The result is
     a smoother change in the gradient.
     
     Finally, the temperatures are scaled to be between 0 and thickness to generate the inflated
     height map. 
-    
-    If roundness > 1., things blow up due to uncontrolled heating.
     """
     
     deltaLengths = tuple(delta.norm() for delta in deltas)
@@ -107,8 +105,10 @@ def inflateRaster(raster, thickness=10., roundness=1., iterations=None,
     width = len(raster)
     height = len(raster[0])
         
+    alpha = len(deltaLengths) * flatness / max(width,height)
+    
     if not iterations:
-        iterations = 60 * max(width,height)
+        iterations = 25 * max(width,height) # 60 ?
         
     data = [ [0. for y in range(height)] for x in range(width) ]
     
@@ -141,12 +141,16 @@ def inflateRaster(raster, thickness=10., roundness=1., iterations=None,
                             w += 1. / deltaLengths[i]
                         else:
                             w += 1. / max(d, eps)
+                            
+                    w += alpha
                     
-                    newData[x][y] = 1.0 + roundness * s / w
+                    newData[x][y] = (alpha if alpha > 0 else 1.0) + (1-alpha) * s / w
 
         data = newData
         
     maxZ = max(max(col) for col in data)
+    
+    #sys.stderr.write(str(maxZ)+"\n")
     
     return [ [datum / maxZ * thickness for datum in col] for col in data ]
 
@@ -159,12 +163,12 @@ if __name__ == '__main__':
     baseName = os.path.splitext(os.path.basename(outPath))[0]
     
     thickness = 10.
-    roundness = 1.
+    flatness = 0.
     iterations = None
     if len(sys.argv)>2:
         thickness = float(sys.argv[2])
     if len(sys.argv)>3:
-        roundness = float(sys.argv[3])
+        flatness = float(sys.argv[3])
     if len(sys.argv)>4:
         iterations = int(sys.argv[4])
 
@@ -179,7 +183,7 @@ if __name__ == '__main__':
     raster = [ [ inside(x,y) for y in range(image.size[1]) ] for x in range(image.size[0]) ]
     
     print("Inflating...")
-    data = inflateRaster(raster,thickness=thickness,roundness=roundness,iterations=iterations)
+    data = inflateRaster(raster,thickness=thickness,flatness=flatness,iterations=iterations)
     
     scadModule = toSCADModule(surfaceToMesh(data, twoSided=False, center=True), baseName+"_raw")
     scadModule += """
