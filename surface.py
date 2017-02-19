@@ -101,6 +101,9 @@ def inflateRaster(raster, thickness=10., roundness=1., iterations=None,
     
     If roundness > 1., things blow up due to uncontrolled heating.
     """
+    
+    deltaLengths = tuple(delta.norm() for delta in deltas)
+    
     width = len(raster)
     height = len(raster[0])
         
@@ -108,6 +111,13 @@ def inflateRaster(raster, thickness=10., roundness=1., iterations=None,
         iterations = 60 * max(width,height)
         
     data = [ [0. for y in range(height)] for x in range(width) ]
+    
+    def weight(x,y,i):
+        d = distanceToEdge(x,y,i)
+        if d < deltaLengths[i]:
+            return 1. / d
+        else:
+            return 1. / deltaLengths[i]
     
     for iter in range(iterations):
         newData = [ [0. for y in range(height)] for x in range(width) ]
@@ -122,7 +132,17 @@ def inflateRaster(raster, thickness=10., roundness=1., iterations=None,
                         return data[x1][y1]
                         
                 if raster[x][y]:
-                    newData[x][y] = 1.0+roundness*(z(-1,0)+z(1,0)+z(0,-1)+z(0,1)+0.7*(z(-1,-1)+z(1,1)+z(-1,1)+z(1,-1)))/(4+0.7*4)
+                    s = 0
+                    w = 0
+                    for i in range(len(deltas)):
+                        d = distanceToEdge(x,y,i)
+                        if d >= 0.99999 * deltaLengths[i]:
+                            s += z(deltas[i].x, deltas[i].y) / deltaLengths[i]
+                            w += 1. / deltaLengths[i]
+                        else:
+                            w += 1. / d
+                    
+                    newData[x][y] = 1.0 + roundness * s / w
 
         data = newData
         

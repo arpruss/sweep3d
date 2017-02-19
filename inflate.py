@@ -82,7 +82,7 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
         return raster[v[0]][v[1]]
         
     message("Making edge distance map")
-    deltas = (Vector(-1,0), Vector(1,0), Vector(0,-1), Vector(0,1))
+    deltas = (Vector(-1,0), Vector(1,0), Vector(0,-1), Vector(0,1), Vector(-1,-1), Vector(1,1), Vector(-1,1), Vector(1,-1))
     deltasComplex = tuple( v.toComplex() for v in deltas )
     deltaLengths = tuple( abs(d) for d in deltasComplex )
     map = [[[1. for i in range(len(deltas))] for row in range(rasterHeight)] for col in range(rasterWidth)]
