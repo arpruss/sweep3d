@@ -45,6 +45,9 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
     rasterHeight = len(raster[0])
     bottomLeftV = Vector(bottomLeft)
     
+    if roundness < 0:
+        roundness = 0.
+    
     def distanceToEdge(z0, direction):
         direction = direction / abs(direction)
         rotate = 1. / direction
@@ -99,6 +102,8 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
     
     def distanceFunction(col, row, i, map=map):
         return map[col][row][i]
+    
+    roundness = 1-(1-roundness)*spacing
     
     surface = inflateRaster(raster, thickness=thickness, roundness=roundness, iterations=iterations, 
                     deltas=deltas, distanceToEdge=distanceFunction)
