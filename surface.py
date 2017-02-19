@@ -76,7 +76,9 @@ def surfaceToMesh(data, center=False, twoSided=False, zClip=None, tolerance=0., 
 
     return mesh
 
-def inflateRaster(raster, thickness=10., roundness=1., iterations=None):
+def inflateRaster(raster, thickness=10., roundness=1., iterations=None, 
+        deltas=(Vector(-1,0),Vector(1,0),Vector(0,1),Vector(0,-1),Vector(-1,-1),Vector(1,1),Vector(-1,1),Vector(1,-1)), 
+        distanceToEdge=lambda (row,col,i): 1. if i<4 else 1.414 ):
     """
     raster is a boolean matrix.
     

@@ -6,6 +6,8 @@ import sys
 import getopt
 from exportmesh import *
 
+quiet = False
+
 def rasterizePolygon(polygon, spacing, shadeMode=shader.Shader.MODE_EVEN_ODD):
     """
     Returns boolean raster of strict interior as well as coordinates of lower-left corner.
@@ -30,13 +32,77 @@ def rasterizePolygon(polygon, spacing, shadeMode=shader.Shader.MODE_EVEN_ODD):
     
     return raster,complex(left,bottom)
     
-def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, thickness=10., roundness=1., iterations=None, center=False, twoSided=False, color=None, trim=True):
+def message(string, quiet=False):
+    if not quiet:
+        sys.stderr.write(string + "\n")
+    
+def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, thickness=10., roundness=1., 
+        iterations=None, center=False, twoSided=False, color=None, trim=True, fastDistanceMap=False):
     # polygon is described by list of (start,stop) pairs, where start and stop are complex numbers
+    message("Rasterizing")
     raster,bottomLeft = rasterizePolygon(polygon, spacing, shadeMode=shadeMode)
     rasterWidth = len(raster)
     rasterHeight = len(raster[0])
     bottomLeftV = Vector(bottomLeft)
-    surface = inflateRaster(raster, thickness=thickness, roundness=roundness, iterations=iterations)
+    
+    def distanceToEdge(z0, direction):
+        direction = direction / abs(direction)
+        rotate = 1. / direction
+        
+        class State(object): pass
+        state = State()
+        state.changed = False
+        state.bestLength = float("inf")
+        
+        for line in polygon:
+            def update(x):
+                if 0 <= x < state.bestLength:
+                    state.changed = True
+                    state.bestLength = x
+        
+            l0 = rotate * (line[0]-z0)
+            l1 = rotate * (line[1]-z0)
+            if l0.imag == l1.imag and l0.imag == 0.:
+                if l0.real <= 0 and l1.real >= 0:
+                    return start
+                update(l0.real)
+                update(l1.real)
+            elif l0.imag <= 0 <= l1.imag or l1.imag <= 0 <= l0.imag:
+                # crosses real line
+                mInv = (l1.real-l0.real)/(l1.imag-l0.imag)
+                # (x - l0.real) / mInv = y - l0.imag
+                # so for y = 0: 
+                x = -l0.imag * mInv + l0.real
+                update(x)
+        return state.bestLength
+
+    def inside(v):
+        if v[0] < 0 or v[0] >= rasterWidth or v[1] < 0 or v[1] >= rasterHeight:
+            return False
+        return raster[v[0]][v[1]]
+        
+    message("Making edge distance map")
+    deltas = (Vector(-1,0), Vector(1,0), Vector(0,-1), Vector(0,1))
+    deltasComplex = tuple( v.toComplex() for v in deltas )
+    deltaLengths = tuple( abs(d) for d in deltasComplex )
+    map = [[[1. for i in range(len(deltas))] for row in range(rasterHeight)] for col in range(rasterWidth)]
+    for col in range(rasterWidth):
+        for row in range(rasterHeight):
+            v = spacing * Vector(col,row) + bottomLeftV
+            for i in range(len(deltasComplex)):
+                if not fastDistanceMap or inside(deltas[i]+(col,row)):
+                    map[col][row][i] = distanceToEdge( v.toComplex(), deltasComplex[i] )
+                else:
+                    map[col][row][i] = deltaLengths[i]
+            
+    message("Inflating")
+    
+    def distanceFunction(col, row, i, map=map):
+        return map[col][row][i]
+    
+    surface = inflateRaster(raster, thickness=thickness, roundness=roundness, iterations=iterations, 
+                    deltas=deltas, distanceToEdge=distanceFunction)
+    message("Meshing")
     mesh0 = surfaceToMesh(surface, center=False, twoSided=twoSided, color=color)
     
     def fixFace(face, polygon, trim=True):
@@ -51,46 +117,12 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
             if delta == 0j:
                 return stop
             length = abs(delta)
-            normDelta = delta / length
-            rotate = 1. / normDelta
             z0 = start.toComplex()
-            
-            class State(object): pass
-            state = State()
-            state.changed = False
-            state.bestLength =  length
-            
-            for line in polygon:
-                def update(x):
-                    if 0 <= x < state.bestLength:
-                        state.changed = True
-                        state.bestLength = x
-            
-                l0 = rotate * (line[0]-z0)
-                l1 = rotate * (line[1]-z0)
-                if l0.imag == l1.imag and l0.imag == 0.:
-                    if l0.real <= 0 and l1.real >= 0:
-                        return start
-                    update(l0.real)
-                    update(l1.real)
-                elif l0.imag <= 0 <= l1.imag or l1.imag <= 0 <= l0.imag:
-                    # crosses real line
-                    mInv = (l1.real-l0.real)/(l1.imag-l0.imag)
-                    # (x - l0.real) / mInv = y - l0.imag
-                    # so for y = 0: 
-                    x = -l0.imag * mInv + l0.real
-                    update(x)
-            if state.changed:
-                z = z0 + state.bestLength * normDelta
-                return Vector(z.real, z.imag, 0.)
-            else:
-                return stop
+            distance = distanceToEdge(z0, delta)
+            if distance < length:
+                z = z0 + distance * delta / length
+                return Vector(z.real, z.imag, 0)
     
-        def inside(v):
-            if v[0] < 0 or v[0] >= rasterWidth or v[1] < 0 or v[1] >= rasterHeight:
-                return False
-            return raster[v[0]][v[1]]
-            
         outsideCount = sum(1 for v in face if not inside(v))
         if outsideCount == 3:
             return []
@@ -118,6 +150,7 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
             else:
                 return [ (face[0], face[1], closest0) ]
 
+    message("Fixing edges of mesh")
     mesh = []
     for rgb,face in mesh0:
         for face2 in fixFace(face, polygon, trim=trim):
