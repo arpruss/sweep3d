@@ -107,7 +107,7 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
     
     def fixFace(face, polygon, trim=True):
         def scaleFace(face):
-            return tuple(v*spacing+bottomLeftV for v in face)
+            return tuple(Vector(v.x*spacing+bottomLeftV.x, v.y*spacing+bottomLeftV.y, v.z) for v in face)
 
         if not trim:
             return [scaleFace(face)]
