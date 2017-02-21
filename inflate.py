@@ -151,7 +151,7 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
             else:
                 return [ (face[0], face[1], closest0) ]
 
-    message("Fixing edges of mesh")
+    message("Fixing outer faces")
     mesh = []
     for rgb,face in mesh0:
         for face2 in fixFace(face, polygon, trim=trim):

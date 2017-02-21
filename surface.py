@@ -3,6 +3,7 @@ from vector import *
 from exportmesh import *
 import itertools
 import os.path
+import math
 
 def surfaceToMesh(data, center=False, twoSided=False, zClip=None, tolerance=0., color=None):
     # if center is False, the mesh coordinates are guaranteed to be integers corresponding exactly
@@ -82,7 +83,7 @@ def inflateRaster(raster, thickness=10., flatness=1., iterations=None,
     """
     raster is a boolean matrix.
     
-    flatness varies from 0 for a very gradual profile to something around 2 or 3 for a very flat top.
+    flatness varies from 0 for a very gradual profile to something around 2-10 for a very flat top.
     
     Here's a way to visualize how inflateImage() works. The white or transparent areas 
     of the image are cold, clamped at temperature 0. Above the image, there is a layer of
@@ -105,7 +106,7 @@ def inflateRaster(raster, thickness=10., flatness=1., iterations=None,
     width = len(raster)
     height = len(raster[0])
         
-    alpha = len(deltaLengths) * flatness / max(width,height)
+    alpha = 500 * len(deltaLengths) * flatness /  max(width,height)**2
     
     if not iterations:
         iterations = 25 * max(width,height) # 60 ?
@@ -133,7 +134,8 @@ def inflateRaster(raster, thickness=10., flatness=1., iterations=None,
                         
                 if raster[x][y]:
                     s = 0
-                    w = 0
+                    w = alpha
+                    
                     for i in range(len(deltas)):
                         d = distanceToEdge(x,y,i)
                         if d >= (1-eps) * deltaLengths[i]:
@@ -142,15 +144,13 @@ def inflateRaster(raster, thickness=10., flatness=1., iterations=None,
                         else:
                             w += 1. / max(d, eps)
                             
-                    w += alpha
-                    
-                    newData[x][y] = (alpha if alpha > 0 else 1.0) + (1-alpha) * s / w
+                    newData[x][y] = (alpha / w if alpha > 0.0 else 1.0) + s / w
 
         data = newData
         
     maxZ = max(max(col) for col in data)
     
-    #sys.stderr.write(str(maxZ)+"\n")
+    sys.stderr.write(str(maxZ)+"\n")
     
     return [ [datum / maxZ * thickness for datum in col] for col in data ]
 
