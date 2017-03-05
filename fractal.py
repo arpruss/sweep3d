@@ -1,5 +1,6 @@
 from exportmesh import *
 from vector import *
+from sys import argv
 
 def moreFaces(v1,v2,v3):
     m = (1./3)*(v1+v2+v3)
@@ -11,7 +12,7 @@ def moreFaces(v1,v2,v3):
     
 v1,v2,v3 = Vector(0,0,0), Vector(10,math.sqrt(3)*10,0), Vector(20,0,0)
 
-nIterations = 2
+nIterations = 2 if len(argv) < 2 else int(argv[1])
 
 mesh = [ (0,face) for face in moreFaces(v3,v2,v1)] + [(0,(v1,v2,v3))] 
 
