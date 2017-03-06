@@ -54,7 +54,11 @@ else:
 if amplitude == None:
     amplitude = 1 if mode == "s" else 10
                 
-amp = lambda n : 1. / 2**(n+1)
+def amp(n):
+    if mode == "s":
+        return 1. / 2**max(0,n-1)
+    else:
+        return 1. / 2**n
 
 def r(n):
     a = amp(n)
