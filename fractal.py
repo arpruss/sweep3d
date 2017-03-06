@@ -6,7 +6,8 @@ def moreFaces(v1,v2,v3,factor):
     m = (1./3)*(v1+v2+v3)
     a = v2-v1
     b = v3-v1
-    h = factor * math.sqrt(6)/3. * a.norm()
+    c = v3-v2
+    h = factor * math.sqrt(6)/3. * (a.norm()+b.norm()+c.norm()) / 3.
     v4 = m + h * a.cross(b).normalize()
     return [ (v1,v2,v4), (v2,v3,v4), (v3,v1,v4) ]
     
