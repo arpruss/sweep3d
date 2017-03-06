@@ -39,6 +39,7 @@ try:
         elif opt == "--hexagon":
             mode = "h"
         elif opt == "--decay":
+            assert '__' not in arg
             formula = arg
             
         i += 1
