@@ -1,7 +1,8 @@
 from exportmesh import *
 from vector import *
 from sys import argv
-from random import uniform
+import random
+import math
 
 nIterations = 2 if len(argv) < 2 else int(argv[1])
 
@@ -9,11 +10,18 @@ height = lambda n : 10. / 2**n
 
 def r(n):
     h = height(n)
-    return uniform(-0.5*h,0.5*h)
+    return random.uniform(-0.5*h,0.5*h)
+    
+center = r(0)
+corners = [r(0) for i in range(6)]
+theta = math.pi / 3.
+x = [10.*math.cos(theta*k) for k in range(6)]
+y = [10.*math.sin(theta*k) for k in range(6)]
 
-mesh = [ ( Vector(0,0,r(0)), Vector(10,math.sqrt(3)*10,r(0)), Vector(20,0,r(0)) ) ]
+mesh = [ (Vector(0,0,center), Vector(x[k],y[k],corners[k]), 
+               Vector(x[(k+1)%6],y[(k+1)%6],corners[(k+1)%6])) for k in range(6)]
 
-for iteration in range(nIterations):
+for iteration in range(1,1+nIterations):
     newMesh = []
     newHeights = {}
     
@@ -37,6 +45,28 @@ for iteration in range(nIterations):
         
 den = 1. if nIterations == 0 else float(nIterations)
 
-mesh = [ (None, face) for face in mesh ]
+offset = Vector(0,0,0.01-min(v.z for face in mesh for v in face))
+
+def project(v):
+    return Vector(v[0],v[1],0)
+            
+bottom = [ tuple(project(v) for v in face) for face in mesh ]
+top = [ tuple(v+offset for v in face) for face in mesh ]
+edges = set()
+
+for face in top:
+    for i in range(3):
+        j = (i+1)%3
+        revEdge = (face[j],face[i])
+        if revEdge in edges:
+            edges.remove(revEdge)
+        else:
+            edges.add((face[i],face[j]))
+
+for edge in edges:
+    top.append((project(edge[0]),project(edge[1]),edge[0]))
+    top.append((project(edge[1]),edge[1],edge[0]))
+
+mesh = [ (None, face) for face in bottom+top ]
 
 saveSTL("noise.stl", mesh)
