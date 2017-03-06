@@ -3,7 +3,7 @@ from exportmesh import *
 from vector import *
 import sys
 import random
-import math
+from math import *
 import os
 import getopt
 
@@ -14,10 +14,11 @@ nIterations = 2
 size = 10
 amplitude = None
 mode = "h"
+formula = "2**-n"
  
 try:
     opts, args = getopt.getopt(sys.argv[1:], "h", 
-                    ["amplitude=", "size=", "iterations=", "sphere", "triangle", "hex", "help"])
+                    ["decay=", "amplitude=", "size=", "iterations=", "formula=", "sphere", "triangle", "hex", "help"])
 
     i = 0
     while i < len(opts):
@@ -37,6 +38,8 @@ try:
             mode = "t"
         elif opt == "--hexagon":
             mode = "h"
+        elif opt == "--decay":
+            formula = arg
             
         i += 1
 except getopt.GetoptError as e:
@@ -55,25 +58,22 @@ if amplitude == None:
     amplitude = 1 if mode == "s" else 10
                 
 def amp(n):
-    if mode == "s":
-        return 1. / 2**max(0,n-1)
-    else:
-        return 1. / 2**n
+    return eval(formula)
 
 def r(n):
     a = amp(n)
     return random.uniform(-0.5*a,0.5*a)
     
 if mode == "h":
-    theta = math.pi / 3.
-    x = [math.cos(theta*k) for k in range(6)]
-    y = [math.sin(theta*k) for k in range(6)]
+    theta = pi / 3.
+    x = [cos(theta*k) for k in range(6)]
+    y = [sin(theta*k) for k in range(6)]
 
     mesh = [ (Vector(0,0), Vector(x[k],y[k]), Vector(x[(k+1)%6],y[(k+1)%6])) for k in range(6)]
 elif mode == "t":
-    mesh = [ (Vector(0,0), Vector(1,0), Vector(0.5,math.sqrt(3)/2.)) ]
+    mesh = [ (Vector(0,0), Vector(1,0), Vector(0.5,sqrt(3)/2.)) ]
 elif mode == "s":
-    vv = (Vector(-1,0,-1./math.sqrt(2)), Vector(1,0,-1./math.sqrt(2)), Vector(0,-1,1./math.sqrt(2)), Vector(0,1,1./math.sqrt(2)))
+    vv = (Vector(-1,0,-1./sqrt(2)), Vector(1,0,-1./sqrt(2)), Vector(0,-1,1./sqrt(2)), Vector(0,1,1./sqrt(2)))
     vv = tuple(v.normalize() for v in vv)
     mesh = [(vv[2],vv[0],vv[1]), (vv[1],vv[0],vv[3]), (vv[0],vv[2],vv[3]), (vv[2],vv[1],vv[3])]
         
