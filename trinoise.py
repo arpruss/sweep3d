@@ -50,7 +50,7 @@ offset = Vector(0,0,0.01-min(v.z for face in mesh for v in face))
 def project(v):
     return Vector(v[0],v[1],0)
             
-bottom = [ tuple(project(v) for v in face) for face in mesh ]
+bottom = [ tuple(project(v) for v in reversed(face)) for face in mesh ]
 top = [ tuple(v+offset for v in face) for face in mesh ]
 edges = set()
 
