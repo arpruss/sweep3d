@@ -15,10 +15,12 @@ size = 10
 amplitude = None
 mode = "h"
 formula = "2**-n"
+diagonalWeight = 0.25
+edgeDiagonalWeight = 0.
  
 try:
     opts, args = getopt.getopt(sys.argv[1:], "h", 
-                    ["decay=", "amplitude=", "size=", "iterations=", "formula=", "sphere", "triangle", "hex", "help"])
+                    ["edge-diagonal-weight=", "diagonal-weight=", "decay=", "amplitude=", "size=", "iterations=", "formula=", "sphere", "triangle", "hex", "help"])
 
     i = 0
     while i < len(opts):
@@ -39,8 +41,12 @@ try:
         elif opt == "--hexagon":
             mode = "h"
         elif opt == "--decay":
-            assert '__' not in arg
+            assert '__' not in arg and 'eval' not in arg
             formula = arg
+        elif opt == '--diagonal-weight':
+            diagonalWeight = float(arg)
+        elif opt == '--edge-diagonal-weight':
+            edgeDiagonalWeight = float(arg)
             
         i += 1
 except getopt.GetoptError as e:
@@ -88,26 +94,39 @@ for v in vertices:
 for iteration in range(1,1+nIterations):
     newMesh = []
     refinements = {}
+    neighbors = {}
     
-    def refine(a,b):
-        index = (min(a,b),max(a,b))
+    def refine(a,b,c):
+        edge = (min(a,b),max(a,b))
         try:
-            return refinements[index]
+            v = refinements[edge]
         except KeyError:
             v = 0.5 * (a+b)
             if mode == "s":
                 v = v.normalize()
-            refinements[index] = v
-            noise[v] = r(iteration)+0.5*(noise[a]+noise[b])
+            refinements[edge] = v
             vertices.add(v)
-            return v
+        if edge not in neighbors:
+            neighbors[edge] = [c]
+        else:
+            neighbors[edge].append(c)
+        return v
     
     for face in mesh:
         v1,v2,v3 = face
-        newMesh.append( (v1,refine(v1,v2),refine(v1,v3))) 
-        newMesh.append( (refine(v1,v2), v2, refine(v2,v3)))
-        newMesh.append( (refine(v2,v3), v3, refine(v1,v3)))
-        newMesh.append( (refine(v2,v3), refine(v1,v3), refine(v1,v2)))
+        newMesh.append( (v1,refine(v1,v2,v3),refine(v1,v3,v2))) 
+        newMesh.append( (refine(v1,v2,v3), v2, refine(v2,v3,v1)))
+        newMesh.append( (refine(v2,v3,v1), v3, refine(v1,v3,v2)))
+        newMesh.append( (refine(v2,v3,v1), refine(v1,v3,v2), refine(v1,v2,v3)))
+        
+    for edge in neighbors:
+        z = r(iteration)
+        nn = neighbors[edge]
+        v = refinements[edge]
+        if len(nn) == 1:
+            noise[v] = z + (noise[edge[0]] + noise[edge[1]] + edgeDiagonalWeight*noise[nn[0]]) / (2+edgeDiagonalWeight)
+        else:
+            noise[v] = z + (noise[edge[0]]+noise[edge[1]]+diagonalWeight*(noise[nn[0]]+noise[nn[1]]))/(2+2*diagonalWeight)
     
     mesh = newMesh
 
