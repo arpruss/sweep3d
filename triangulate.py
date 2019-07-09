@@ -181,10 +181,9 @@ def intersects(segment, segments):
             return True
     return False
     
-def lineSegmentsToPolygon(segments):
+def lineSegmentsToLoop(segments):
     segmentDict = { s[0]:s[1] for s in segments }
     loop = extractLoop(segmentDict)
-    #return loop
     didAdd = True
     while segmentDict and didAdd:
         didAdd = False
@@ -238,5 +237,5 @@ if __name__ == '__main__':
             angle2 = sign * 2 * pi * ((i+1)%points) / points
             segments.append( ( (r*cos(angle1),r*sin(angle1)), (r*cos(angle2),r*sin(angle2)) ) )
 
-    loop = [Vector(v) for v in lineSegmentsToPolygon(segments)]
+    loop = [Vector(v) for v in lineSegmentsToLoop(segments)]
     print(polygonsToSVG(loop,triangulate(loop,possibleDegeneracy=True)))
